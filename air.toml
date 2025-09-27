@@ -1,0 +1,26 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Windows build -> output .\tmp\app.exe
+  cmd = "go build -o .\\tmp\\app.exe ."
+  bin = ".\\tmp\\app.exe"
+  include_ext = ["go", "mod", "sum", "env"]
+  exclude_dir = ["vendor", "tmp", ".git", "node_modules"]
+  delay = 1000
+
+[log]
+  time = true
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  app = "green"
+
+[env]
+  PORT = "8080"
+  # Adjust your DSN here or override via OS env
+  DATABASE_DSN = "host=localhost user=postgres password=postgres dbname=trdp port=5432 sslmode=disable TimeZone=Asia/Jakarta"
+
+[misc]
+  clean_on_exit = true
