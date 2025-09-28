@@ -1,9 +1,9 @@
 package main
 
 import (
-	"Dashboard-TRDP/database"
-	"Dashboard-TRDP/helper"
-	"Dashboard-TRDP/routes"
+	"Bea-Cukai/database"
+	"Bea-Cukai/helper"
+	"Bea-Cukai/routes"
 	"log"
 )
 

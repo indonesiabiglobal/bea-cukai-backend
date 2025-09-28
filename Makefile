@@ -1,8 +1,8 @@
-# Makefile (taruh di /var/www/dashboard-app/dashboard-backend/Makefile)
+# Makefile (taruh di /var/www/bea-cukai-app/bea-cukai-backend/Makefile)
 
 SHELL := /bin/bash
 
-APP_NAME   := dashboard-backend
+APP_NAME   := bea-cukai-backend
 MAIN_PKG   := ./         # main.go ada di root project
 BUILD_DIR  := bin
 BIN        := $(BUILD_DIR)/$(APP_NAME)

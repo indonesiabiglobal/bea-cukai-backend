@@ -1,10 +1,10 @@
 package database
 
 import (
-	"Dashboard-TRDP/helper"
+	"Bea-Cukai/helper"
 	"fmt"
 
-	"gorm.io/driver/postgres"
+	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -15,9 +15,9 @@ func ConnectDB() (*gorm.DB, error) {
 	password := helper.GetEnv("DB_PASSWORD")
 	dbName := helper.GetEnv("DB_NAME")
 
-	dsn := fmt.Sprintf("host=%s user=%s password=%s dbname=%s port=%s sslmode=disable TimeZone=Asia/Jakarta",
-		host, username, password, dbName, port)
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		username, password, host, port, dbName)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 
 	return db, err
 }

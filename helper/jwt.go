@@ -11,11 +11,11 @@ import (
 
 var SECRETKEY string = GetEnv("SECRETKEY")
 
-func GenerateToken(id uint, email string) (string, error) {
+func GenerateToken(idUser string, nmUser string) (string, error) {
 	claims := jwt.MapClaims{
-		"id":    id,
-		"email": email,
-		"exp":   time.Now().Add(time.Minute * 15).Unix(),
+		"id_user": idUser,
+		"nm_user": nmUser,
+		"exp":     time.Now().Add(time.Minute * 60).Unix(), // Extended to 24 hours
 	}
 
 	jwt := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)

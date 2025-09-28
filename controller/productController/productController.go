@@ -1,102 +1,83 @@
 package productController
 
 import (
+	"Bea-Cukai/helper/apiRequest"
+	"Bea-Cukai/model"
+	"Bea-Cukai/service/productService"
 	"net/http"
-	"strconv"
-	"strings"
-
-	"Dashboard-TRDP/helper/apiresponse"
-	"Dashboard-TRDP/repo/productRepository"
-	"Dashboard-TRDP/service/productService"
 
 	"github.com/gin-gonic/gin"
 )
 
 type ProductController struct {
-	svc *productService.ProductService
+	productService *productService.ProductService
 }
 
-func NewProductController(svc *productService.ProductService) *ProductController {
-	return &ProductController{svc: svc}
-}
-
-/* ===== Helpers ===== */
-
-func qStr(c *gin.Context, key, def string) string {
-	v := strings.TrimSpace(c.Query(key))
-	if v == "" {
-		return def
+func NewProductController(productService *productService.ProductService) *ProductController {
+	return &ProductController{
+		productService: productService,
 	}
-	return v
 }
 
-func qInt(c *gin.Context, key string, def int) int {
-	if v := strings.TrimSpace(c.Query(key)); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
-	}
-	return def
-}
+func (p *ProductController) GetAll(ctx *gin.Context) {
+	var req model.ProductRequest
 
-func qBoolPtr(c *gin.Context, key string) *bool {
-	v := strings.TrimSpace(c.Query(key))
-	if v == "" {
-		return nil
-	}
-	if b, err := strconv.ParseBool(v); err == nil {
-		return &b
-	}
-	return nil
-}
+	// Parse query parameters
+	req.ItemCode = ctx.Query("item_code")
+	req.ItemName = ctx.Query("item_name")
+	req.ItemGroup = ctx.Query("item_group")
+	req.ItemTypeCode = ctx.Query("item_type_code")
 
-/* ===== Routes =====
-GET /master-products/categories?search=&page=1&limit=20
-GET /master-products/products?search=&category_code=&status=&kode_akun=&kode_principle=&generik=&keras=&narkotik=&psikotropika=&page=1&limit=20
-*/
+	// Parse pagination parameters
+	req.Page = apiRequest.ParseInt(ctx, "page", 1)
+	req.Limit = apiRequest.ParseLimit(ctx, 10)
 
-func (h *ProductController) GetCategories(c *gin.Context) {
-	search := qStr(c, "search", "")
-	page := qInt(c, "page", 1)
-	limit := qInt(c, "limit", 20)
-
-	res, err := h.svc.GetCategories(c.Request.Context(), search, page, limit)
+	// Get data from service
+	products, total, meta, err := p.productService.GetAll(req)
 	if err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "MP_CATEGORIES_FETCH_FAILED", "fail get categories", err, nil)
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to get products",
+			"error":   err.Error(),
+		})
 		return
 	}
 
-	apiresponse.OK(c, res.Items, "ok", apiresponse.PageMeta{
-		Page:  page,
-		Limit: limit,
-		Total: res.Total,
+	// Return response
+	ctx.JSON(http.StatusOK, gin.H{
+		"message":  "Products retrieved successfully",
+		"data":     products,
+		"meta":     meta,
+		"total":    total,
 	})
 }
 
-func (h *ProductController) GetProducts(c *gin.Context) {
-	f := productRepository.ProductFilter{
-		Search:        qStr(c, "search", ""),
-		CategoryCode:  qStr(c, "category_code", ""),
-		Status:        qStr(c, "status", ""),
-		KodeAkun:      qStr(c, "kode_akun", ""),
-		KodePrinciple: qStr(c, "kode_principle", ""),
-		ObatGenerik:   qBoolPtr(c, "generik"),
-		ObatKeras:     qBoolPtr(c, "keras"),
-		Narkotik:      qBoolPtr(c, "narkotik"),
-		Psikotropika:  qBoolPtr(c, "psikotropika"),
-	}
-	page := qInt(c, "page", 1)
-	limit := qInt(c, "limit", 20)
-
-	res, err := h.svc.GetProducts(c.Request.Context(), f, page, limit)
-	if err != nil {
-		apiresponse.Error(c, http.StatusInternalServerError, "MP_PRODUCTS_FETCH_FAILED", "fail get products", err, nil)
+func (p *ProductController) GetByCode(ctx *gin.Context) {
+	code := ctx.Param("code")
+	if code == "" {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"message": "Item code is required",
+		})
 		return
 	}
 
-	apiresponse.OK(c, res.Items, "ok", apiresponse.PageMeta{
-		Page:  page,
-		Limit: limit,
-		Total: res.Total,
+	product, err := p.productService.GetByCode(code)
+	if err != nil {
+		if err.Error() == "product with code "+code+" not found" {
+			ctx.JSON(http.StatusNotFound, gin.H{
+				"message": err.Error(),
+			})
+			return
+		}
+
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"message": "Failed to get product",
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"message": "Product retrieved successfully",
+		"data":    product,
 	})
 }

@@ -1,28 +1,43 @@
 package routes
 
 import (
-	"Dashboard-TRDP/controller/incomeController"
-	"Dashboard-TRDP/controller/patientController"
-	"Dashboard-TRDP/controller/productController"
-	"Dashboard-TRDP/controller/purchaseController"
-	"Dashboard-TRDP/controller/saleController"
-	"Dashboard-TRDP/controller/userController"
-	"Dashboard-TRDP/controller/visitController"
-	"Dashboard-TRDP/middleware"
-	"Dashboard-TRDP/repo/incomeRepository"
-	"Dashboard-TRDP/repo/patientRepository"
-	"Dashboard-TRDP/repo/productRepository"
-	"Dashboard-TRDP/repo/purchaseRepository"
-	"Dashboard-TRDP/repo/saleRepository"
-	"Dashboard-TRDP/repo/userRepository"
-	"Dashboard-TRDP/repo/visitRepository"
-	"Dashboard-TRDP/service/incomeService"
-	"Dashboard-TRDP/service/patientService"
-	"Dashboard-TRDP/service/productService"
-	"Dashboard-TRDP/service/purchaseService"
-	"Dashboard-TRDP/service/saleService"
-	"Dashboard-TRDP/service/userService"
-	"Dashboard-TRDP/service/visitService"
+	"Bea-Cukai/controller/auxiliaryMaterialReportController"
+	"Bea-Cukai/controller/entryProductController"
+	"Bea-Cukai/controller/expenditureProductController"
+	"Bea-Cukai/controller/finishedProductReportController"
+	"Bea-Cukai/controller/itemGroupController"
+	"Bea-Cukai/controller/machineToolReportController"
+	"Bea-Cukai/controller/pabeanController"
+	"Bea-Cukai/controller/productController"
+	"Bea-Cukai/controller/rawMaterialReportController"
+	"Bea-Cukai/controller/rejectScrapReportController"
+	"Bea-Cukai/controller/userController"
+	"Bea-Cukai/controller/wipPositionReportController"
+	"Bea-Cukai/middleware"
+	"Bea-Cukai/repo/auxiliaryMaterialReportRepository"
+	"Bea-Cukai/repo/entryProductRepository"
+	"Bea-Cukai/repo/expenditureProductRepository"
+	"Bea-Cukai/repo/finishedProductReportRepository"
+	"Bea-Cukai/repo/itemGroupRepository"
+	"Bea-Cukai/repo/machineToolReportRepository"
+	"Bea-Cukai/repo/pabeanRepository"
+	"Bea-Cukai/repo/productRepository"
+	"Bea-Cukai/repo/rawMaterialReportRepository"
+	"Bea-Cukai/repo/rejectScrapReportRepository"
+	"Bea-Cukai/repo/userRepository"
+	"Bea-Cukai/repo/wipPositionReportRepository"
+	"Bea-Cukai/service/auxiliaryMaterialReportService"
+	"Bea-Cukai/service/entryProductService"
+	"Bea-Cukai/service/expenditureProductService"
+	"Bea-Cukai/service/finishedProductReportService"
+	"Bea-Cukai/service/itemGroupService"
+	"Bea-Cukai/service/machineToolReportService"
+	"Bea-Cukai/service/pabeanService"
+	"Bea-Cukai/service/productService"
+	"Bea-Cukai/service/rawMaterialReportService"
+	"Bea-Cukai/service/rejectScrapReportService"
+	"Bea-Cukai/service/userService"
+	"Bea-Cukai/service/wipPositionReportService"
 	"os"
 	"strings"
 	"time"
@@ -48,13 +63,11 @@ func corsConfig() cors.Config {
 
 	return cors.Config{
 		AllowOrigins: origins,
-		AllowMethods: []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowHeaders: []string{
-			"Origin", "Content-Type", "Accept", "Authorization",
-			"Accept-Language", "X-Requested-With", "Cache-Control", "Pragma",
-		},
+		// AllowAllOrigins:  true,
+		AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"*"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true, // kalau pakai cookies; kalau tidak, bisa false
+		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}
 }
@@ -62,25 +75,45 @@ func corsConfig() cors.Config {
 func NewRoute(db *gorm.DB) *gin.Engine {
 	// Repositories
 	userRepository := userRepository.NewUserRepository(db)
-	incomeRepository := incomeRepository.NewIncomeRepository(db)
-	purchaseRepository := purchaseRepository.NewPurchaseRepository(db)
-	saleRepository := saleRepository.NewSaleRepository(db)
+	entryProductRepository := entryProductRepository.NewEntryProductRepository(db)
+	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(db)
+	pabeanRepository := pabeanRepository.NewPabeanRepository(db)
+	itemGroupRepository := itemGroupRepository.NewItemGroupRepository(db)
+	productRepository := productRepository.NewProductRepository(db)
+	wipPositionReportRepository := wipPositionReportRepository.NewWipPositionReportRepository(db)
+	rawMaterialReportRepository := rawMaterialReportRepository.NewRawMaterialReportRepository(db)
+	finishedProductReportRepository := finishedProductReportRepository.NewFinishedProductReportRepository(db)
+	machineToolReportRepository := machineToolReportRepository.NewMachineToolReportRepository(db)
+	rejectScrapReportRepository := rejectScrapReportRepository.NewRejectScrapReportRepository(db)
+	auxiliaryMaterialReportRepository := auxiliaryMaterialReportRepository.NewAuxiliaryMaterialReportRepository(db)
 
 	// Services
 	userService := userService.NewUserService(userRepository)
-	incomeService := incomeService.NewIncomeService(incomeRepository)
-	purchaseService := purchaseService.NewPurchaseService(purchaseRepository)
-	saleService := saleService.NewSaleService(saleRepository)
+	entryProductService := entryProductService.NewEntryProductService(entryProductRepository)
+	expenditureProductService := expenditureProductService.NewExpenditureProductService(expenditureProductRepository)
+	pabeanService := pabeanService.NewPabeanService(pabeanRepository)
+	itemGroupService := itemGroupService.NewItemGroupService(itemGroupRepository)
+	productService := productService.NewProductService(productRepository)
+	wipPositionReportService := wipPositionReportService.NewWipPositionReportService(wipPositionReportRepository)
+	rawMaterialReportService := rawMaterialReportService.NewRawMaterialReportService(rawMaterialReportRepository)
+	finishedProductReportService := finishedProductReportService.NewFinishedProductReportService(finishedProductReportRepository)
+	machineToolReportService := machineToolReportService.NewMachineToolReportService(machineToolReportRepository)
+	rejectScrapReportService := rejectScrapReportService.NewRejectScrapReportService(rejectScrapReportRepository)
+	auxiliaryMaterialReportService := auxiliaryMaterialReportService.NewAuxiliaryMaterialReportService(auxiliaryMaterialReportRepository)
 
 	// Controllers
 	userController := userController.NewUserController(userService)
-	incomeController := incomeController.NewIncomeController(incomeService)
-	purchaseController := purchaseController.NewPurchaseController(purchaseService)
-	saleController := saleController.NewSaleController(saleService)
-
-	visitRepo := visitRepository.NewVisitRepository(db)
-	visitSvc := visitService.NewVisitService(visitRepo)
-	visitCtrl := visitController.NewVisitController(visitSvc)
+	entryProductController := entryProductController.NewEntryProductController(entryProductService)
+	expenditureProductController := expenditureProductController.NewExpenditureProductController(expenditureProductService)
+	pabeanController := pabeanController.NewPabeanController(pabeanService)
+	itemGroupController := itemGroupController.NewItemGroupController(itemGroupService)
+	productController := productController.NewProductController(productService)
+	wipPositionReportController := wipPositionReportController.NewWipPositionReportController(wipPositionReportService)
+	rawMaterialReportController := rawMaterialReportController.NewRawMaterialReportController(rawMaterialReportService)
+	finishedProductReportController := finishedProductReportController.NewFinishedProductReportController(finishedProductReportService)
+	machineToolReportController := machineToolReportController.NewMachineToolReportController(machineToolReportService)
+	rejectScrapReportController := rejectScrapReportController.NewRejectScrapReportController(rejectScrapReportService)
+	auxiliaryMaterialReportController := auxiliaryMaterialReportController.NewAuxiliaryMaterialReportController(auxiliaryMaterialReportService)
 
 	app := gin.Default()
 
@@ -93,96 +126,97 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	app.OPTIONS("/*any", func(c *gin.Context) { c.Status(204) })
 
 	/* API Routes */
+	// auth Routes
+	auth := app.Group("/auth")
+	{
+		auth.POST("/login", userController.LoginUser)
+		auth.POST("/register", userController.CreateUser)
+
+		// logout
+		auth.Use(middleware.Authentication())
+		{
+			auth.POST("/logout", userController.LogoutUser)
+		}
+	}
 
 	// User Routes
 	users := app.Group("/users")
 	{
-		users.POST("/register", userController.CreateUser)
-		users.POST("/login", userController.LoginUser)
-
 		// Protected user endpoints
 		users.Use(middleware.Authentication())
 		{
+			users.GET("", userController.GetAll)
+			users.GET("/profile", userController.GetProfile)
 			users.PUT("/", userController.UpdateUser)
 			users.DELETE("/", userController.DeleteUser)
 		}
 	}
 
-	// Income Routes (raw list/detail)
-	income := app.Group("/income")
+	// Report: EntryProduct analytics
+	reportEntryProduct := app.Group("/report/entry-products")
 	{
-		income.GET("/", incomeController.GetAllIncomes)
-		income.GET("/:id", incomeController.GetIncomeByID)
+		reportEntryProduct.GET("", entryProductController.GetReport)
 	}
 
-	// Dashboard: Income analytics
-	dashboardIncome := app.Group("/dashboard/income")
+	// Report: ExpenditureProduct analytics
+	reportExpenditureProduct := app.Group("/report/expenditure-products")
 	{
-		dashboardIncome.GET("/summary", incomeController.GetKPISummary)
-		dashboardIncome.GET("/trend", incomeController.GetRevenueTrend)
-		dashboardIncome.GET("/top-units", incomeController.GetTopUnits)
-		dashboardIncome.GET("/top-providers", incomeController.GetTopProviders)
-		dashboardIncome.GET("/top-guarantors", incomeController.GetTopGuarantors)
-		dashboardIncome.GET("/top-guarantor-groups", incomeController.GetTopGuarantorGroups)
-		dashboardIncome.GET("/revenue-by-service", incomeController.GetRevenueByService)
-		dashboardIncome.GET("/mix-ipop", incomeController.GetRevenueByIPOP)
-		dashboardIncome.GET("/by-dow", incomeController.GetRevenueByDOW)
+		reportExpenditureProduct.GET("", expenditureProductController.GetReport)
 	}
 
-	dashboardPurchase := app.Group("/dashboard/purchase")
+	// Report: WIP Position
+	reportWipPosition := app.Group("/report/wip-position")
 	{
-		dashboardPurchase.GET("/summary", purchaseController.GetKPISummary)
-		dashboardPurchase.GET("/trend", purchaseController.GetTrend)
-		dashboardPurchase.GET("/top-vendors", purchaseController.GetTopVendors)
-		dashboardPurchase.GET("/top-products", purchaseController.GetTopProducts)
-		dashboardPurchase.GET("/by-category", purchaseController.GetByCategory)
+		reportWipPosition.GET("", wipPositionReportController.GetReport)
 	}
 
-	purchase := app.Group("/purchases")
+	// Report: Raw Material
+	reportRawMaterial := app.Group("/report/raw-material")
 	{
-		purchase.GET("/vendors", purchaseController.GetVendors)
+		reportRawMaterial.GET("", rawMaterialReportController.GetReport)
 	}
 
-	dashboardSales := app.Group("/dashboard/sales")
+	// Report: Finished Product
+	reportFinishedProduct := app.Group("/report/finished-product")
 	{
-		dashboardSales.GET("/summary", saleController.GetKPISummary)
-		dashboardSales.GET("/trend", saleController.GetTrend)
-		dashboardSales.GET("/top-products", saleController.GetTopProducts)
-		dashboardSales.GET("/by-category", saleController.GetByCategory)
+		reportFinishedProduct.GET("", finishedProductReportController.GetReport)
 	}
 
-	visits := app.Group("/dashboard/visits")
+	// Report: Machine and Tool
+	reportMachineTool := app.Group("/report/machine-tool")
 	{
-		visits.GET("/summary", visitCtrl.GetKPISummary)
-		visits.GET("/trend", visitCtrl.GetTrend)
-		visits.GET("/top-services", visitCtrl.GetTopServices)
-		visits.GET("/top-guarantors", visitCtrl.GetTopGuarantors)
-		visits.GET("/by-dow", visitCtrl.GetByDOW)
-		visits.GET("/by-region", visitCtrl.GetByRegionKota)
-		visits.GET("/mix-ipop", visitCtrl.GetMixIPOP)
-		visits.GET("/los-buckets", visitCtrl.GetLOSBuckets)
+		reportMachineTool.GET("", machineToolReportController.GetReport)
 	}
 
-	// Product Routes
-	productRepository := productRepository.NewProductRepository(db)
-	productService := productService.NewProductService(productRepository)
-	productController := productController.NewProductController(productService)
-
-	mp := app.Group("/products")
+	// Report: Reject and Scrap
+	reportRejectScrap := app.Group("/report/reject-scrap-product")
 	{
-		mp.GET("/", productController.GetProducts)
-		mp.GET("/categories", productController.GetCategories)
+		reportRejectScrap.GET("", rejectScrapReportController.GetReport)
 	}
 
-	// Patient
-	patientRepo := patientRepository.NewPatientRepository(db)
-	patientSvc := patientService.NewPatientService(patientRepo)
-	patientCtrl := patientController.NewPatientController(patientSvc)
-
-	patient := app.Group("/patients")
+	// Report: Auxiliary Material
+	reportAuxiliaryMaterial := app.Group("/auxiliary-material")
 	{
-		patient.GET("/inpatient/monitoring", patientCtrl.MonitoringInpatient)
-		patient.GET("/inpatient/discharged", patientCtrl.DischargedPatient)
+		reportAuxiliaryMaterial.GET("", auxiliaryMaterialReportController.GetReport)
+	}
+
+	// Pabean: Master pabean document
+	pabean := app.Group("/pabean")
+	{
+		pabean.GET("", pabeanController.GetAll)
+	}
+
+	// Item Groups: System item groups
+	itemGroups := app.Group("/item-groups")
+	{
+		itemGroups.GET("", itemGroupController.GetAll)
+	}
+
+	// Products: Master products (ms_item)
+	products := app.Group("/products")
+	{
+		products.GET("", productController.GetAll)
+		products.GET("/:code", productController.GetByCode)
 	}
 
 	return app

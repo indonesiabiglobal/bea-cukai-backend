@@ -1,109 +1,52 @@
 package productService
 
 import (
-	"context"
-
-	"Dashboard-TRDP/model"
-	"Dashboard-TRDP/repo/productRepository"
+	"Bea-Cukai/model"
+	"Bea-Cukai/repo/productRepository"
+	"math"
 )
 
 type ProductService struct {
-	repo *productRepository.ProductRepository
+	repo productRepository.ProductRepository
 }
 
-func NewProductService(repo *productRepository.ProductRepository) *ProductService {
+func NewProductService(repo productRepository.ProductRepository) *ProductService {
 	return &ProductService{repo: repo}
 }
 
-type CategoriesResult struct {
-	Items []productRepository.MPCategory `json:"items"`
-	Total int64                          `json:"total"`
-}
-
-const (
-	defaultLimit = 10
-	maxLimit     = 200
-	allBatchSize = 500
-	hardCapAll   = 10000
-)
-
-func (s *ProductService) GetCategories(
-	ctx context.Context, search string, page, limit int,
-) (CategoriesResult, error) {
-	// sentinel: -1 = minta semua
-	if limit == -1 {
-		items, err := s.GetAllCategories(ctx, search)
-		if err != nil {
-			return CategoriesResult{}, err
-		}
-		return CategoriesResult{Items: items, Total: int64(len(items))}, nil
+func (s *ProductService) GetAll(req model.ProductRequest) ([]model.Product, int64, map[string]interface{}, error) {
+	// Set defaults for pagination
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.Limit <= 0 {
+		req.Limit = 10
 	}
 
-	if limit <= 0 {
-		limit = defaultLimit
-	}
-	if limit > maxLimit {
-		limit = maxLimit
-	}
-	if page <= 0 {
-		page = 1
-	}
-	offset := (page - 1) * limit
-
-	items, total, err := s.repo.GetCategories(ctx, search, limit, offset)
+	// Get products from repository
+	products, total, err := s.repo.GetAll(req)
 	if err != nil {
-		return CategoriesResult{}, err
+		return nil, 0, nil, err
 	}
-	return CategoriesResult{Items: items, Total: total}, nil
+
+	// Calculate pagination metadata
+	totalPages := int(math.Ceil(float64(total) / float64(req.Limit)))
+	hasNext := req.Page < totalPages
+	hasPrev := req.Page > 1
+
+	// Prepare metadata
+	meta := map[string]interface{}{
+		"page":        req.Page,
+		"limit":       req.Limit,
+		"total_count": total,
+		"total_pages": totalPages,
+		"has_next":    hasNext,
+		"has_prev":    hasPrev,
+	}
+
+	return products, total, meta, nil
 }
 
-func (s *ProductService) GetAllCategories(
-	ctx context.Context, search string,
-) ([]productRepository.MPCategory, error) {
-	var all []productRepository.MPCategory
-
-	page := 1
-	for {
-		offset := (page - 1) * allBatchSize
-		batch, total, err := s.repo.GetCategories(ctx, search, allBatchSize, offset)
-		if err != nil {
-			return nil, err
-		}
-		if len(batch) == 0 {
-			break
-		}
-
-		all = append(all, batch...)
-
-		// selesai jika sudah mencapai total
-		if int64(len(all)) >= total {
-			break
-		}
-		page++
-	}
-	return all, nil
-}
-
-type ProductsResult struct {
-	Items []model.MasterProduct `json:"items"`
-	Total int64                 `json:"total"`
-}
-
-func (s *ProductService) GetProducts(ctx context.Context, f productRepository.ProductFilter, page, limit int) (ProductsResult, error) {
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 200 {
-		limit = 200
-	}
-	if page <= 0 {
-		page = 1
-	}
-	offset := (page - 1) * limit
-
-	items, total, err := s.repo.GetProducts(ctx, f, limit, offset)
-	if err != nil {
-		return ProductsResult{}, err
-	}
-	return ProductsResult{Items: items, Total: total}, nil
+func (s *ProductService) GetByCode(code string) (*model.Product, error) {
+	return s.repo.GetByCode(code)
 }
