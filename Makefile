@@ -1,4 +1,4 @@
-# Makefile (taruh di /var/www/bea-cukai-app/bea-cukai-backend/Makefile)
+# Makefile (taruh di /opt/bea-cukai-app/bea-cukai-backend/Makefile)
 
 SHELL := /bin/bash
 

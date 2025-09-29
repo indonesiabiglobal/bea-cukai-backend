@@ -49,7 +49,7 @@ import (
 
 func corsConfig() cors.Config {
 	allow := os.Getenv("CORS_ALLOW_ORIGINS")
-	origins := []string{"http://202.157.187.183:3131", "http://localhost:3000", "http://127.0.0.1:3000"}
+	origins := []string{"http://192.168.100.100:3131", "http://localhost:3000", "http://127.0.0.1:3000","http://localhost:3131", "http://127.0.0.1:3131"}
 	if allow != "" {
 		parts := strings.Split(allow, ",")
 		origins = make([]string, 0, len(parts))

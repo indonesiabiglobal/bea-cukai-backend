@@ -1,0 +1,26 @@
+# /etc/systemd/system/bea-cukai-backend.service
+[Unit]
+Description=Bea Cukai Backend API
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=root
+Group=root
+WorkingDirectory=/opt/bea-cukai-app/bea-cukai-backend
+EnvironmentFile=/opt/bea-cukai-app/bea-cukai-backend/trdp.env
+ExecStart=/opt/bea-cukai-app/bea-cukai-backend/bin/dashboard-backend
+Restart=always
+RestartSec=2
+LimitNOFILE=65536
+
+# Hardening (opsional; kalau mengganggu akses file, hapus perlahan)
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/bea-cukai-app/bea-cukai-backend
+# SystemCallFilter=@system-service   # aktifkan jika sudah yakin
+
+[Install]
+WantedBy=multi-user.target
