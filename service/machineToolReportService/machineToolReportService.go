@@ -4,7 +4,6 @@ import (
 	"Bea-Cukai/model"
 	"Bea-Cukai/repo/machineToolReportRepository"
 	"context"
-	"time"
 )
 
 // MachineToolReportService sits on top of the machineToolReportRepository and exposes use-case oriented APIs
@@ -23,15 +22,7 @@ func NewMachineToolReportService(repo *machineToolReportRepository.MachineToolRe
 // ==========================
 
 // GetReport retrieves machine and tool report with filters and pagination
-func (s *MachineToolReportService) GetReport(from, to time.Time, itemCode, itemName string, page, limit int) ([]model.MachineToolReportResponse, int64, error) {
+func (s *MachineToolReportService) GetReport(filter machineToolReportRepository.GetReportFilter) ([]model.MachineToolReportResponse, int64, error) {
 	ctx := context.Background()
-	filter := machineToolReportRepository.GetReportFilter{
-		From:     from,
-		To:       to,
-		ItemCode: itemCode,
-		ItemName: itemName,
-		Page:     page,
-		Limit:    limit,
-	}
 	return s.repo.GetReport(ctx, filter)
 }

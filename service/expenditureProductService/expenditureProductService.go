@@ -4,7 +4,6 @@ import (
 	"Bea-Cukai/model"
 	"Bea-Cukai/repo/expenditureProductRepository"
 	"context"
-	"time"
 )
 
 // ExpenditureProductService sits on top of the expenditureProductRepository and exposes use-case oriented APIs
@@ -23,18 +22,7 @@ func NewExpenditureProductService(expenditureProductRepo *expenditureProductRepo
 // ==========================
 
 // GetReport retrieves expenditure products with filters and pagination
-func (s *ExpenditureProductService) GetReport(from, to time.Time, pabeanType, productGroup, noPabean, productCode, productName string, page, limit int) ([]model.ExpenditureProduct, int64, error) {
+func (s *ExpenditureProductService) GetReport(filter expenditureProductRepository.GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
 	ctx := context.Background()
-	filter := expenditureProductRepository.GetReportFilter{
-		From:         from,
-		To:           to,
-		PabeanType:   pabeanType,
-		ProductGroup: productGroup,
-		NoPabean:     noPabean,
-		ProductCode:  productCode,
-		ProductName:  productName,
-		Page:         page,
-		Limit:        limit,
-	}
 	return s.expenditureProductRepo.GetReport(ctx, filter)
 }

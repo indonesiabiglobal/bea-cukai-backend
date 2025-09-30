@@ -85,11 +85,9 @@ func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReport
 		return nil, 0, err
 	}
 
-	// Apply pagination
-	if filter.Limit > 0 {
+	// Apply pagination only if both page and limit are provided (> 0)
+	if filter.Limit > 0 && filter.Page > 0 {
 		query = query.Limit(filter.Limit)
-	}
-	if filter.Page > 0 && filter.Limit > 0 {
 		offset := (filter.Page - 1) * filter.Limit
 		query = query.Offset(offset)
 	}

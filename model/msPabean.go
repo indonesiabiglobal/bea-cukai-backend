@@ -6,8 +6,8 @@ import (
 
 type MsPabean struct {
 	ID          int       `json:"id" gorm:"primaryKey;autoIncrement"`
-	PabeanCode  string    `json:"pabean_code" gorm:"type:varchar(255);not null"`
-	PabeanName  string    `json:"pabean_name" gorm:"type:varchar(255);not null"`
+	PabeanCode  string    `json:"pabean_code" gorm:"column:dept_code;type:varchar(255);not null"`
+	PabeanName  string    `json:"pabean_name" gorm:"column:dept_name;type:varchar(255);not null"`
 	Notes       string    `json:"notes" gorm:"type:text"`
 	CreatedBy   string    `json:"created_by" gorm:"type:varchar(255)"`
 	CreatedDate time.Time `json:"created_date" gorm:"type:datetime"`

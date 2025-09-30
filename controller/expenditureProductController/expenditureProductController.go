@@ -3,10 +3,15 @@ package expenditureProductController
 import (
 	"Bea-Cukai/helper/apiRequest"
 	"Bea-Cukai/helper/apiresponse"
+	"Bea-Cukai/model"
+	"Bea-Cukai/repo/expenditureProductRepository"
 	"Bea-Cukai/service/expenditureProductService"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 type ExpenditureProductController struct {
@@ -40,10 +45,21 @@ func (c *ExpenditureProductController) GetReport(ctx *gin.Context) {
 	productName := ctx.Query("productName")
 
 	// Get pagination parameters
-	page := apiRequest.ParseInt(ctx, "page", 1)    // default to page 1 if not provided or invalid
-	limit := apiRequest.ParseInt(ctx, "limit", 10) // default to 10 items per page if not provided or invalid
+	page := apiRequest.ParseInt(ctx, "page", 0)    // default to page 1 if not provided or invalid
+	limit := apiRequest.ParseInt(ctx, "limit", 0) // default to 10 items per page if not provided or invalid
 
-	res, totalCount, err := c.ExpenditureProductService.GetReport(from, to, pabeanType, productGroup, noPabean, productCode, productName, page, limit)
+	filter := expenditureProductRepository.GetReportFilter{
+		From:         from,
+		To:           to,
+		PabeanType:   pabeanType,
+		ProductGroup: productGroup,
+		NoPabean:     noPabean,
+		ProductCode:  productCode,
+		ProductName:  productName,
+		Page:         page,
+		Limit:        limit,
+	}
+	res, totalCount, err := c.ExpenditureProductService.GetReport(filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get expenditure products", err, gin.H{
 			"from":         from.Format("2006-01-02"),
@@ -60,9 +76,19 @@ func (c *ExpenditureProductController) GetReport(ctx *gin.Context) {
 	}
 
 	// Calculate pagination metadata
-	totalPages := int((totalCount + int64(limit) - 1) / int64(limit)) // ceil division
-	hasNext := page < totalPages
-	hasPrev := page > 1
+	var totalPages int
+	var hasNext, hasPrev bool
+	
+	if limit > 0 {
+		totalPages = int((totalCount + int64(limit) - 1) / int64(limit)) // ceil division
+		hasNext = page < totalPages
+		hasPrev = page > 1
+	} else {
+		// No pagination case
+		totalPages = 1
+		hasNext = false
+		hasPrev = false
+	}
 
 	apiresponse.OK(ctx, res, "ok", gin.H{
 		"from":         from.Format("2006-01-02"),
@@ -83,4 +109,212 @@ func (c *ExpenditureProductController) GetReport(ctx *gin.Context) {
 		},
 		"timezone": from.Location().String(),
 	})
+}
+
+// GET /report/expenditure-products/export?from=YYYY-MM-DD&to=YYYY-MM-DD&pabeanType=...&productGroup=...&noPabean=...&productCode=...&productName=...
+func (c *ExpenditureProductController) ExportExcel(ctx *gin.Context) {
+	from, to, err := apiRequest.GetRange(ctx)
+	if err != nil {
+		apiresponse.Error(ctx, http.StatusBadRequest, "BAD_DATE_RANGE", "invalid date range", err, gin.H{
+			"from": ctx.Query("from"),
+			"to":   ctx.Query("to"),
+		})
+		return
+	}
+
+	// Get optional filter parameters
+	pabeanType := ctx.Query("pabeanType")
+	productGroup := ctx.Query("productGroup")
+	noPabean := ctx.Query("noPabean")
+	productCode := ctx.Query("productCode")
+	productName := ctx.Query("productName")
+
+	// For export, we don't use pagination - get all data
+	filter := expenditureProductRepository.GetReportFilter{
+		From:         from,
+		To:           to,
+		PabeanType:   pabeanType,
+		ProductGroup: productGroup,
+		NoPabean:     noPabean,
+		ProductCode:  productCode,
+		ProductName:  productName,
+		Page:         0, // No pagination
+		Limit:        0, // No limit
+	}
+
+	res, _, err := c.ExpenditureProductService.GetReport(filter)
+	if err != nil {
+		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get expenditure products for export", err, gin.H{
+			"from":         from.Format("2006-01-02"),
+			"to":           to.Format("2006-01-02"),
+			"pabeanType":   pabeanType,
+			"productGroup": productGroup,
+			"noPabean":     noPabean,
+			"productCode":  productCode,
+			"productName":  productName,
+		})
+		return
+	}
+
+	// Generate Excel file
+	excelFile, err := c.generateExcelFile(res, from, to)
+	if err != nil {
+		apiresponse.Error(ctx, http.StatusInternalServerError, "EXCEL_GENERATION_FAILED", "failed to generate Excel file", err, gin.H{
+			"from": from.Format("2006-01-02"),
+			"to":   to.Format("2006-01-02"),
+		})
+		return
+	}
+	defer excelFile.Close()
+
+	// Set headers for Excel file download
+	filename := fmt.Sprintf("laporan_pengeluaran_barang_%s_%s.xlsx", 
+		from.Format("2006-01-02"), 
+		to.Format("2006-01-02"))
+	
+	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	ctx.Header("Cache-Control", "no-cache")
+	
+	// Write Excel file to response
+	buffer, err := excelFile.WriteToBuffer()
+	if err != nil {
+		apiresponse.Error(ctx, http.StatusInternalServerError, "EXCEL_WRITE_FAILED", "failed to write Excel file", err, gin.H{})
+		return
+	}
+	
+	ctx.Data(http.StatusOK, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", buffer.Bytes())
+}
+
+// generateExcelFile creates a real XLSX file using excelize for expenditure products
+func (c *ExpenditureProductController) generateExcelFile(data []model.ExpenditureProduct, from, to time.Time) (*excelize.File, error) {
+	// Create a new Excel file
+	f := excelize.NewFile()
+	sheetName := "Laporan Pengeluaran Barang"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return nil, err
+	}
+	f.SetActiveSheet(index)
+
+	// Set title and header information
+	title1 := "LAPORAN PENGELUARAN BARANG PER DOKUMEN PABEAN"
+	title2 := "PT FUKUSUKE KOGYO INDONESIA"
+	title3 := fmt.Sprintf("PERIODE : %s S.D %s", from.Format("2006-01-02"), to.Format("2006-01-02"))
+	
+	f.SetCellValue(sheetName, "A1", title1)
+	f.SetCellValue(sheetName, "A2", title2)
+	f.SetCellValue(sheetName, "A3", title3)
+
+	// Merge cells for titles
+	f.MergeCell(sheetName, "A1", "M1")
+	f.MergeCell(sheetName, "A2", "M2")
+	f.MergeCell(sheetName, "A3", "M3")
+
+	// Set title styles
+	titleStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Font:      &excelize.Font{Bold: true, Size: 14},
+	})
+	f.SetCellStyle(sheetName, "A1", "M3", titleStyle)
+
+	// Set table headers starting from row 5
+	headers := [][]string{
+		{"No.", "DOKUMEN PABEAN", "", "", "BUKTI PENGELUARAN BARANG", "", "PENERIMA BARANG", "KODE BARANG", "NAMA BARANG", "JUMLAH", "SATUAN", "VALAS", "NILAI"},
+		{"", "JENIS", "NOMOR", "TANGGAL", "NOMOR", "TANGGAL", "", "", "", "", "", "", ""},
+	}
+
+	// Set first header row (row 5)
+	for col, header := range headers[0] {
+		cell, _ := excelize.CoordinatesToCellName(col+1, 5)
+		f.SetCellValue(sheetName, cell, header)
+	}
+
+	// Set second header row (row 6)
+	for col, header := range headers[1] {
+		if header != "" {
+			cell, _ := excelize.CoordinatesToCellName(col+1, 6)
+			f.SetCellValue(sheetName, cell, header)
+		}
+	}
+
+	// Merge header cells
+	f.MergeCell(sheetName, "A5", "A6") // No.
+	f.MergeCell(sheetName, "B5", "D5") // DOKUMEN PABEAN
+	f.MergeCell(sheetName, "E5", "F5") // BUKTI PENGELUARAN BARANG
+	f.MergeCell(sheetName, "G5", "G6") // PENERIMA BARANG
+	f.MergeCell(sheetName, "H5", "H6") // KODE BARANG
+	f.MergeCell(sheetName, "I5", "I6") // NAMA BARANG
+	f.MergeCell(sheetName, "J5", "J6") // JUMLAH
+	f.MergeCell(sheetName, "K5", "K6") // SATUAN
+	f.MergeCell(sheetName, "L5", "L6") // VALAS
+	f.MergeCell(sheetName, "M5", "M6") // NILAI
+
+	// Set header style
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Font:      &excelize.Font{Bold: true},
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"F0F0F0"}, Pattern: 1},
+	})
+	f.SetCellStyle(sheetName, "A5", "M6", headerStyle)
+
+	// Add data rows starting from row 7
+	for i, expenditureProduct := range data {
+		row := i + 7
+		
+		// Set values for each column
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)                                           // No
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), expenditureProduct.JenisPabean)               // Jenis Pabean
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), expenditureProduct.NoPabean)                  // No Pabean
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), expenditureProduct.TglPabean.Format("2006-01-02")) // Tgl Pabean
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), expenditureProduct.TransNo)                   // Trans No (Nomor Pengeluaran)
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), expenditureProduct.TransDate.Format("2006-01-02")) // Trans Date
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), expenditureProduct.CustName)                  // Customer Name (Penerima)
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), expenditureProduct.ItemCode)                  // Item Code
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), expenditureProduct.ItemName)                  // Item Name
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), expenditureProduct.DlvQty.String())           // Delivery Qty
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), expenditureProduct.SalesUnit)                 // Sales Unit
+		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), expenditureProduct.CurrCode)                  // Currency Code
+		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), expenditureProduct.NetAmount.String())        // Net Amount
+	}
+
+	// Set data style with borders
+	if len(data) > 0 {
+		dataStyle, _ := f.NewStyle(&excelize.Style{
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		lastRow := len(data) + 6
+		f.SetCellStyle(sheetName, "A7", fmt.Sprintf("M%d", lastRow), dataStyle)
+	}
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 5)   // No
+	f.SetColWidth(sheetName, "B", "B", 12)  // Jenis Pabean
+	f.SetColWidth(sheetName, "C", "C", 20)  // No Pabean
+	f.SetColWidth(sheetName, "D", "D", 12)  // Tgl Pabean
+	f.SetColWidth(sheetName, "E", "E", 15)  // Trans No
+	f.SetColWidth(sheetName, "F", "F", 12)  // Trans Date
+	f.SetColWidth(sheetName, "G", "G", 25)  // Customer Name
+	f.SetColWidth(sheetName, "H", "H", 15)  // Item Code
+	f.SetColWidth(sheetName, "I", "I", 30)  // Item Name
+	f.SetColWidth(sheetName, "J", "J", 12)  // Delivery Qty
+	f.SetColWidth(sheetName, "K", "K", 10)  // Sales Unit
+	f.SetColWidth(sheetName, "L", "L", 8)   // Currency Code
+	f.SetColWidth(sheetName, "M", "M", 15)  // Net Amount
+
+	// Delete default sheet if it exists
+	f.DeleteSheet("Sheet1")
+
+	return f, nil
 }
