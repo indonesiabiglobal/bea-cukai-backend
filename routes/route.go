@@ -49,7 +49,7 @@ import (
 
 func corsConfig() cors.Config {
 	allow := os.Getenv("CORS_ALLOW_ORIGINS")
-	origins := []string{"http://192.168.100.100:3131", "http://localhost:3000", "http://127.0.0.1:3000","http://localhost:3131", "http://127.0.0.1:3131"}
+	origins := []string{"http://192.168.100.100:3131", "http://36.93.193.19:3131", "http://localhost:3000", "http://127.0.0.1:3000","http://localhost:3131", "http://127.0.0.1:3131"}
 	if allow != "" {
 		parts := strings.Split(allow, ",")
 		origins = make([]string, 0, len(parts))
@@ -156,56 +156,48 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	reportEntryProduct := app.Group("/report/entry-products")
 	{
 		reportEntryProduct.GET("", entryProductController.GetReport)
-		reportEntryProduct.GET("/export", entryProductController.ExportExcel)
 	}
 
 	// Report: ExpenditureProduct analytics
 	reportExpenditureProduct := app.Group("/report/expenditure-products")
 	{
 		reportExpenditureProduct.GET("", expenditureProductController.GetReport)
-		reportExpenditureProduct.GET("/export", expenditureProductController.ExportExcel)
 	}
 
 	// Report: WIP Position
 	reportWipPosition := app.Group("/report/wip-position")
 	{
 		reportWipPosition.GET("", wipPositionReportController.GetReport)
-		reportWipPosition.GET("/export", wipPositionReportController.ExportExcel)
 	}
 
 	// Report: Raw Material
 	reportRawMaterial := app.Group("/report/raw-material")
 	{
 		reportRawMaterial.GET("", rawMaterialReportController.GetReport)
-		reportRawMaterial.GET("/export", rawMaterialReportController.ExportExcel)
 	}
 
 	// Report: Finished Product
 	reportFinishedProduct := app.Group("/report/finished-product")
 	{
 		reportFinishedProduct.GET("", finishedProductReportController.GetReport)
-		reportFinishedProduct.GET("/export", finishedProductReportController.ExportExcel)
 	}
 
 	// Report: Machine and Tool
 	reportMachineTool := app.Group("/report/machine-tool")
 	{
 		reportMachineTool.GET("", machineToolReportController.GetReport)
-		reportMachineTool.GET("/export", machineToolReportController.ExportExcel)
 	}
 
 	// Report: Reject and Scrap
 	reportRejectScrap := app.Group("/report/reject-scrap-product")
 	{
 		reportRejectScrap.GET("", rejectScrapReportController.GetReport)
-		reportRejectScrap.GET("/export", rejectScrapReportController.ExportExcel)
 	}
 
 	// Report: Auxiliary Material
 	reportAuxiliaryMaterial := app.Group("/auxiliary-material")
 	{
 		reportAuxiliaryMaterial.GET("", auxiliaryMaterialReportController.GetReport)
-		reportAuxiliaryMaterial.GET("/export", auxiliaryMaterialReportController.ExportExcel)
 	}
 
 	// Pabean: Master pabean document
