@@ -19,17 +19,6 @@ func NewEntryProductRepository(db *gorm.DB) *EntryProductRepository {
 	return &EntryProductRepository{db: db}
 }
 
-// ---- Helpers ----
-
-type DateRange struct{ From, To time.Time } // inclusive range by [From, To]
-
-func (r DateRange) norm() (time.Time, time.Time) {
-	from := time.Date(r.From.Year(), r.From.Month(), r.From.Day(), 0, 0, 0, 0, r.From.Location())
-	// make To inclusive end-of-day
-	toEnd := time.Date(r.To.Year(), r.To.Month(), r.To.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), r.To.Location())
-	return from, toEnd
-}
-
 // ---- DTOs for report results ----
 type KPISummary struct {
 	TotalRcvQty    decimal.Decimal `json:"total_rcv_qty"`
@@ -57,7 +46,7 @@ type GetReportFilter struct {
 
 // GetReport retrieves entry products with filters and pagination
 func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.EntryProduct, int64, error) {
-	from, to := DateRange{From: filter.From, To: filter.To}.norm()
+	from, to := filter.From, filter.To
 
 	query := c.db.WithContext(ctx).Model(&model.EntryProduct{}).
 		Where("trans_date BETWEEN ? AND ?", from, to)

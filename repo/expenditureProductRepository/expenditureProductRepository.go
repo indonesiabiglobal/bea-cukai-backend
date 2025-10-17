@@ -18,19 +18,6 @@ func NewExpenditureProductRepository(db *gorm.DB) *ExpenditureProductRepository 
 	return &ExpenditureProductRepository{db: db}
 }
 
-// ---- Helpers ----
-
-type DateRange struct{ From, To time.Time } // inclusive range by [From, To]
-
-func (r DateRange) norm() (time.Time, time.Time) {
-	from := time.Date(r.From.Year(), r.From.Month(), r.From.Day(), 0, 0, 0, 0, r.From.Location())
-	// make To inclusive end-of-day
-	toEnd := time.Date(r.To.Year(), r.To.Month(), r.To.Day(), 23, 59, 59, int(time.Second-time.Nanosecond), r.To.Location())
-	return from, toEnd
-}
-
-// ---- Core operations ----
-
 // Filter struct for GetReport method
 type GetReportFilter struct {
 	From         time.Time
@@ -46,8 +33,7 @@ type GetReportFilter struct {
 
 // GetReport retrieves expenditure products with filters and pagination
 func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
-	from, to := DateRange{From: filter.From, To: filter.To}.norm()
-
+	from, to := filter.From, filter.To
 	query := c.db.WithContext(ctx).Model(&model.ExpenditureProduct{}).
 		Where("trans_date BETWEEN ? AND ?", from, to)
 
