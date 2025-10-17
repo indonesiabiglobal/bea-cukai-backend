@@ -101,11 +101,19 @@ func (c *RawMaterialReportController) GetReport(ctx *gin.Context) {
 
 // GET /report/raw-material/export?from=YYYY-MM-DD&to=YYYY-MM-DD&item_code=...&item_name=...
 func (c *RawMaterialReportController) ExportExcel(ctx *gin.Context) {
-	from, to, err := apiRequest.GetRange(ctx)
+	fromStr := ctx.Query("from")
+	from, err := time.Parse("2006-01-02", fromStr)
 	if err != nil {
-		apiresponse.Error(ctx, http.StatusBadRequest, "BAD_DATE_RANGE", "invalid date range", err, gin.H{
-			"from": ctx.Query("from"),
-			"to":   ctx.Query("to"),
+		apiresponse.Error(ctx, http.StatusBadRequest, "BAD_DATE", "invalid from date", err, gin.H{
+			"from": fromStr,
+		})
+		return
+	}
+	toStr := ctx.Query("to")
+	to, err := time.Parse("2006-01-02", toStr)
+	if err != nil {
+		apiresponse.Error(ctx, http.StatusBadRequest, "BAD_DATE", "invalid to date", err, gin.H{
+			"to": toStr,
 		})
 		return
 	}
@@ -127,8 +135,8 @@ func (c *RawMaterialReportController) ExportExcel(ctx *gin.Context) {
 	res, _, err := c.RawMaterialReportService.GetReport(filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail to get raw material report for export", err, gin.H{
-			"from":      from.Format("2006-01-02"),
-			"to":        to.Format("2006-01-02"),
+			"from":      from,
+			"to":        to,
 			"item_code": itemCode,
 			"item_name": itemName,
 		})
@@ -139,17 +147,15 @@ func (c *RawMaterialReportController) ExportExcel(ctx *gin.Context) {
 	excelFile, err := c.generateExcelFile(res, from, to)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "EXCEL_GENERATION_FAILED", "failed to generate Excel file", err, gin.H{
-			"from": from.Format("2006-01-02"),
-			"to":   to.Format("2006-01-02"),
+			"from": from,
+			"to":   to,
 		})
 		return
 	}
 	defer excelFile.Close()
 
 	// Set headers for Excel file download
-	filename := fmt.Sprintf("laporan_mutasi_bahan_baku_%s_%s.xlsx", 
-		from.Format("2006-01-02"), 
-		to.Format("2006-01-02"))
+	filename := fmt.Sprintf("laporan_mutasi_bahan_baku_%s_%s.xlsx", from.Format("2006-01-02"), to.Format("2006-01-02"))
 	
 	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
