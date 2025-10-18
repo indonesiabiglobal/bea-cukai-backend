@@ -141,14 +141,14 @@ func (r *WipPositionReportRepository) GetReport(ctx context.Context, filter GetR
 
 	// Prepare arguments for the complex query
 	queryArgs := []interface{}{
-		filter.TglAwal.AddDate(0, 0, -1), // DATE_SUB(tgl_awal, INTERVAL 1 DAY)
-		tglInvAwal,
-		filter.TglAwal,
-		filter.TglAkhir,
-		filter.TglAwal,
-		filter.TglAkhir,
-		filter.TglAkhir,
-		tglInvAkhir,
+		filter.TglAwal.AddDate(0, 0, -1).Format("2006-01-02"), // DATE_SUB(tgl_awal, INTERVAL 1 DAY)
+		tglInvAwal.Format("2006-01-02"),
+		filter.TglAwal.Format("2006-01-02"),
+		filter.TglAkhir.Format("2006-01-02"),
+		filter.TglAwal.Format("2006-01-02"),
+		filter.TglAkhir.Format("2006-01-02"),
+		filter.TglAkhir.Format("2006-01-02"),
+		tglInvAkhir.Format("2006-01-02"),
 	}
 	queryArgs = append(queryArgs, args...)
 

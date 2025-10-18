@@ -11,10 +11,10 @@ func parseDate(value string, loc *time.Location) (time.Time, error) {
 	if value == "" {
 		return time.Time{}, nil
 	}
-	if t, err := time.ParseInLocation(time.RFC3339, value, loc); err == nil {
+	if t, err := time.Parse("2006-01-02", value); err == nil {
 		return t, nil
 	}
-	return time.ParseInLocation("2006-01-02", value, loc)
+	return time.Parse("2006-01-02", value)
 }
 
 func GetRange(ctx *gin.Context) (time.Time, time.Time, error) {
@@ -23,7 +23,7 @@ func GetRange(ctx *gin.Context) (time.Time, time.Time, error) {
 	toStr := ctx.Query("to")
 
 	// defaults: last 30 days
-	now := time.Now().In(loc)
+	now := time.Now()
 	from := now.AddDate(0, 0, -30)
 	to := now
 
