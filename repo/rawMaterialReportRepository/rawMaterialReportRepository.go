@@ -122,12 +122,12 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		),
 		z AS (
 			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-				FORMAT(IFNULL(b.awal, 0), 0) as awal,
-				FORMAT(IFNULL(c.masuk, 0) + IFNULL(g.movein, 0), 0) as masuk,
-				FORMAT((IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)) - IFNULL(f.opname, 0), 0) as keluar,
-				FORMAT(IFNULL(e.peny, 0), 0) as peny,
-				FORMAT((IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)), 0) as akhir,
-				FORMAT(IFNULL(f.opname, 0), 0) as opname,
+				IFNULL(b.awal, 0) as awal,
+				IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) as masuk,
+				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)) - IFNULL(f.opname, 0) as keluar,
+				IFNULL(e.peny, 0) as peny,
+				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)) as akhir,
+				IFNULL(f.opname, 0) as opname,
 				0 as selisih
 			FROM ms_item a 
 			LEFT JOIN b ON a.item_code = b.item_code 
@@ -137,7 +137,7 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			LEFT JOIN g ON a.item_code = g.item_code 
 			WHERE a.item_group = 'MATERIAL' %s
 		)
-		SELECT * FROM z WHERE z.awal <> '0' OR z.opname <> '0' OR z.masuk <> '0' OR z.akhir <> '0' OR z.peny <> '0'
+		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
 	`, whereConditions)
 
 	// Prepare arguments for the complex query
@@ -151,6 +151,7 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		filter.From.Format("2006-01-02"),
 		filter.To.Format("2006-01-02"),
 	}
+	fmt.Println("Query Args:", queryArgs)
 	queryArgs = append(queryArgs, args...)
 
 	// Get total count first

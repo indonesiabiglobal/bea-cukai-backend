@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -252,7 +253,10 @@ func (c *WipPositionReportController) generateExcelFile(data []model.WipPosition
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), wipItem.ItemCode)          // Item Code (kode_barang)
 		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), wipItem.ItemName)          // Item Name (nama_barang)
 		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), wipItem.UnitCode)          // Unit Code (sat)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), wipItem.Jumlah)            // Jumlah (saldo akhir)
+		// Convert string to float64 for proper number formatting in Excel
+		jumlahFloat, _ := decimal.NewFromString(wipItem.Jumlah)
+		jumlahValue, _ := jumlahFloat.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), jumlahValue)               // Jumlah (saldo akhir)
 	}
 
 	// Set data style with borders
@@ -267,6 +271,18 @@ func (c *WipPositionReportController) generateExcelFile(data []model.WipPosition
 		})
 		lastRow := len(data) + 10
 		f.SetCellStyle(sheetName, "A11", fmt.Sprintf("E%d", lastRow), dataStyle)
+		
+		// Number format with thousand separator and 2 decimal places
+		numStyle, _ := f.NewStyle(&excelize.Style{
+			NumFmt: 4, // "#,##0.00" - format ribuan dengan 2 desimal
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		f.SetCellStyle(sheetName, "E11", fmt.Sprintf("E%d", lastRow), numStyle) // Jumlah
 	}
 
 	// Set column widths

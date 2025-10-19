@@ -282,14 +282,19 @@ func (c *EntryProductController) generateExcelFile(data []model.EntryProduct, fr
 		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), entryProduct.VendorName)                // Vendor Name
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), entryProduct.ItemCode)                  // Item Code
 		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), entryProduct.ItemName)                  // Item Name
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), entryProduct.RcvQty.String())           // Rcv Qty
+		// Convert decimal to float64 for proper number formatting in Excel
+		rcvQtyFloat, _ := entryProduct.RcvQty.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), rcvQtyFloat)                            // Rcv Qty
 		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), entryProduct.PchUnit)                   // Pch Unit
 		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), entryProduct.CurrCode)                  // Curr Code
-		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), entryProduct.NetAmount.String())        // Net Amount
+		// Convert decimal to float64 for proper number formatting in Excel
+		netAmountFloat, _ := entryProduct.NetAmount.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), netAmountFloat)                         // Net Amount
 	}
 
 	// Set data style with borders
 	if len(data) > 0 {
+		lastRow := len(data) + 6
 		dataStyle, _ := f.NewStyle(&excelize.Style{
 			Border: []excelize.Border{
 				{Type: "left", Color: "000000", Style: 1},
@@ -298,8 +303,20 @@ func (c *EntryProductController) generateExcelFile(data []model.EntryProduct, fr
 				{Type: "right", Color: "000000", Style: 1},
 			},
 		})
-		lastRow := len(data) + 6
 		f.SetCellStyle(sheetName, "A7", fmt.Sprintf("M%d", lastRow), dataStyle)
+		
+		// Number format with thousand separator and 2 decimal places
+		numStyle, _ := f.NewStyle(&excelize.Style{
+			NumFmt: 4, // "#,##0.00" - format ribuan dengan 2 desimal
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		f.SetCellStyle(sheetName, "J7", fmt.Sprintf("J%d", lastRow), numStyle) // Rcv Qty
+		f.SetCellStyle(sheetName, "M7", fmt.Sprintf("M%d", lastRow), numStyle) // Net Amount
 	}
 
 	// Set column widths

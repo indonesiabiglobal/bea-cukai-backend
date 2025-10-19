@@ -2,24 +2,26 @@ package model
 
 import (
 	"time"
+
+	"github.com/shopspring/decimal"
 )
 
 type FinishedProductReport struct {
-	ItemCode     string `json:"item_code"`
-	ItemName     string `json:"item_name"`
-	UnitCode     string `json:"unit_code"`
-	ItemTypeCode string `json:"item_type_code"`
-	ItemGroup    string `json:"item_group"`
-	LocationCode string `json:"location_code"`
-	Awal         string `json:"awal"`
-	Masuk        string `json:"masuk"`
-	Keluar       string `json:"keluar"`
-	Peny         string `json:"peny"`
-	Akhir        string `json:"akhir"`
-	Opname       string `json:"opname"`
-	Selisih      string `json:"selisih"`
-	Akhr         string `json:"akhr"`
-	Msk          string `json:"msk"`
+	ItemCode     string          `json:"item_code"`
+	ItemName     string          `json:"item_name"`
+	UnitCode     string          `json:"unit_code"`
+	ItemTypeCode string          `json:"item_type_code"`
+	ItemGroup    string          `json:"item_group"`
+	LocationCode string          `json:"location_code"`
+	Awal         decimal.Decimal `json:"awal"`
+	Masuk        decimal.Decimal `json:"masuk"`
+	Keluar       decimal.Decimal `json:"keluar"`
+	Peny         decimal.Decimal `json:"peny"`
+	Akhir        decimal.Decimal `json:"akhir"`
+	Opname       decimal.Decimal `json:"opname"`
+	Selisih      decimal.Decimal `json:"selisih"`
+	Akhr         decimal.Decimal `json:"akhr"`
+	Msk          decimal.Decimal `json:"msk"`
 }
 
 type FinishedProductReportRequest struct {

@@ -273,13 +273,29 @@ func (c *RawMaterialReportController) generateExcelFile(data []model.RawMaterial
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), rawMaterial.ItemCode)          // Item Code
 		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), rawMaterial.ItemName)          // Item Name
 		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), rawMaterial.UnitCode)          // Unit Code
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), rawMaterial.Awal)              // Saldo Awal
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), rawMaterial.Masuk)             // Pemasukan
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), rawMaterial.Keluar)            // Pengeluaran
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), rawMaterial.Peny)              // Penyesuaian
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), rawMaterial.Akhir)             // Saldo Akhir
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), rawMaterial.Opname)            // Stok Opname
-		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), rawMaterial.Selisih)           // Selisih
+		
+		// Convert decimal.Decimal to float64 for proper number formatting in Excel
+		awalFloat, _ := rawMaterial.Awal.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), awalFloat)                     // Saldo Awal
+		
+		masukFloat, _ := rawMaterial.Masuk.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), masukFloat)                    // Pemasukan
+		
+		keluarFloat, _ := rawMaterial.Keluar.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluarFloat)                   // Pengeluaran
+		
+		penyFloat, _ := rawMaterial.Peny.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), penyFloat)                     // Penyesuaian
+		
+		akhirFloat, _ := rawMaterial.Akhir.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), akhirFloat)                    // Saldo Akhir
+		
+		opnameFloat, _ := rawMaterial.Opname.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), opnameFloat)                   // Stok Opname
+		
+		selisihFloat, _ := rawMaterial.Selisih.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), selisihFloat)                  // Selisih
+		
 		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), "")                            // Keterangan (empty for now)
 	}
 
@@ -295,6 +311,24 @@ func (c *RawMaterialReportController) generateExcelFile(data []model.RawMaterial
 		})
 		lastRow := len(data) + 10
 		f.SetCellStyle(sheetName, "A11", fmt.Sprintf("L%d", lastRow), dataStyle)
+		
+		// Number format with thousand separator WITHOUT decimal places
+		numStyle, _ := f.NewStyle(&excelize.Style{
+			NumFmt: 3, // "#,##0" - format ribuan tanpa desimal
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		f.SetCellStyle(sheetName, "E11", fmt.Sprintf("E%d", lastRow), numStyle) // Saldo Awal
+		f.SetCellStyle(sheetName, "F11", fmt.Sprintf("F%d", lastRow), numStyle) // Pemasukan
+		f.SetCellStyle(sheetName, "G11", fmt.Sprintf("G%d", lastRow), numStyle) // Pengeluaran
+		f.SetCellStyle(sheetName, "H11", fmt.Sprintf("H%d", lastRow), numStyle) // Penyesuaian
+		f.SetCellStyle(sheetName, "I11", fmt.Sprintf("I%d", lastRow), numStyle) // Saldo Akhir
+		f.SetCellStyle(sheetName, "J11", fmt.Sprintf("J%d", lastRow), numStyle) // Stok Opname
+		f.SetCellStyle(sheetName, "K11", fmt.Sprintf("K%d", lastRow), numStyle) // Selisih
 	}
 
 	// Set column widths

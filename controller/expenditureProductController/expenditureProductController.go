@@ -280,10 +280,14 @@ func (c *ExpenditureProductController) generateExcelFile(data []model.Expenditur
 		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), expenditureProduct.CustName)                  // Customer Name (Penerima)
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), expenditureProduct.ItemCode)                  // Item Code
 		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), expenditureProduct.ItemName)                  // Item Name
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), expenditureProduct.DlvQty.String())           // Delivery Qty
+		// Convert decimal to float64 for proper number formatting in Excel
+		dlvQtyFloat, _ := expenditureProduct.DlvQty.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), dlvQtyFloat)                                  // Delivery Qty
 		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), expenditureProduct.SalesUnit)                 // Sales Unit
 		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), expenditureProduct.CurrCode)                  // Currency Code
-		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), expenditureProduct.NetAmount.String())        // Net Amount
+		// Convert decimal to float64 for proper number formatting in Excel
+		netAmountFloat, _ := expenditureProduct.NetAmount.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("M%d", row), netAmountFloat)                               // Net Amount
 	}
 
 	// Set data style with borders
@@ -298,6 +302,19 @@ func (c *ExpenditureProductController) generateExcelFile(data []model.Expenditur
 		})
 		lastRow := len(data) + 6
 		f.SetCellStyle(sheetName, "A7", fmt.Sprintf("M%d", lastRow), dataStyle)
+		
+		// Number format with thousand separator and 2 decimal places
+		numStyle, _ := f.NewStyle(&excelize.Style{
+			NumFmt: 4, // "#,##0.00" - format ribuan dengan 2 desimal
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		f.SetCellStyle(sheetName, "J7", fmt.Sprintf("J%d", lastRow), numStyle) // Delivery Qty
+		f.SetCellStyle(sheetName, "M7", fmt.Sprintf("M%d", lastRow), numStyle) // Net Amount
 	}
 
 	// Set column widths

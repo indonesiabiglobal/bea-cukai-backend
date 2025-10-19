@@ -5,7 +5,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -17,16 +16,6 @@ type EntryProductRepository struct {
 
 func NewEntryProductRepository(db *gorm.DB) *EntryProductRepository {
 	return &EntryProductRepository{db: db}
-}
-
-// ---- DTOs for report results ----
-type KPISummary struct {
-	TotalRcvQty    decimal.Decimal `json:"total_rcv_qty"`
-	TotalNetPrice  decimal.Decimal `json:"total_net_price"`
-	TotalNetAmount decimal.Decimal `json:"total_net_amount"`
-	UniqueVendors  int64           `json:"unique_vendors"`
-	UniqueItems    int64           `json:"unique_items"`
-	TxCount        int64           `json:"tx_count"`
 }
 
 // ---- Core aggregations ----

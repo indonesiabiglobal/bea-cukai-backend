@@ -122,12 +122,12 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 		), 
 		a AS (
 			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-				FORMAT(IFNULL(b.awal, 0), 0) as awal,
+				IFNULL(b.awal, 0) as awal,
 				IFNULL(c.masuk, 0) as masuk,
-				FORMAT(IFNULL(d.keluar, 0), 0) as keluar,
-				FORMAT(IFNULL(e.peny, 0), 0) as peny,
+				IFNULL(d.keluar, 0) as keluar,
+				IFNULL(e.peny, 0) as peny,
 				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) - IFNULL(d.keluar, 0) + IFNULL(e.peny, 0)) as akhir,
-				FORMAT(IFNULL(f.opname, 0), 0) as opname,
+				IFNULL(f.opname, 0) as opname,
 				0 as selisih
 			FROM ms_item a 
 			LEFT JOIN b ON a.item_code = b.item_code 
@@ -137,9 +137,9 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 			LEFT JOIN f ON a.item_code = f.item_code 
 			WHERE a.item_group = 'PRODUCT' %s
 		)
-		SELECT a.*, FORMAT(opname, 0) as akhr, FORMAT(masuk - (akhir - opname), 0) as msk 
+		SELECT a.*, opname as akhr, masuk - (akhir - opname) as msk 
 		FROM a 
-		WHERE a.awal <> '0' OR a.opname <> '0' OR a.keluar <> '0' OR a.peny <> '0' OR akhir <> 0 OR opname <> '0'
+		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0 OR opname <> 0
 	`, whereConditions)
 
 	// Prepare arguments for the complex query

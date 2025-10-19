@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -230,25 +229,25 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 	for i, item := range data {
 		row := i + 11
 		
-		// Convert string values to float for proper display
-		awal, _ := strconv.ParseFloat(item.Awal, 64)
-		masuk, _ := strconv.ParseFloat(item.Msk, 64)
-		keluar, _ := strconv.ParseFloat(item.Keluar, 64)
-		peny, _ := strconv.ParseFloat(item.Peny, 64)
-		akhr, _ := strconv.ParseFloat(item.Akhr, 64)
-		selisih, _ := strconv.ParseFloat(item.Selisih, 64)
+		// Convert decimal.Decimal to float64 for proper number formatting in Excel
+		awalFloat, _ := item.Awal.Float64()
+		mskFloat, _ := item.Msk.Float64()
+		keluarFloat, _ := item.Keluar.Float64()
+		penyFloat, _ := item.Peny.Float64()
+		akhrFloat, _ := item.Akhr.Float64()
+		selisihFloat, _ := item.Selisih.Float64()
 
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.ItemCode)
 		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), item.ItemName)
 		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), item.UnitCode)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), awal)
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), masuk)
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluar)
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), peny)
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), akhr)
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), akhr)
-		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), selisih)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), awalFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), mskFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluarFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), penyFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), akhrFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), akhrFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), selisihFloat)
 		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), "")
 	}
 
@@ -278,9 +277,9 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 		},
 	})
 
-	// Number style for numeric columns
+	// Number style for numeric columns (without decimal places)
 	numberStyle, _ := f.NewStyle(&excelize.Style{
-		NumFmt: 1, // Number format
+		NumFmt: 3, // "#,##0" - format ribuan tanpa desimal
 		Border: []excelize.Border{
 			{Type: "left", Color: "000000", Style: 1},
 			{Type: "top", Color: "000000", Style: 1},

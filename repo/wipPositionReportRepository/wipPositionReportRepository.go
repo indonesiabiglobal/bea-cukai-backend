@@ -198,7 +198,7 @@ func (r *WipPositionReportRepository) GetReport(ctx context.Context, filter GetR
 			ItemCode: raw.ItemCode,
 			ItemName: raw.ItemName,
 			UnitCode: raw.UnitCode,
-			Jumlah:   raw.Awal.String(), // Format awal as string like PHP number_format
+			Jumlah:   raw.Awal.String(),
 		}
 		results = append(results, response)
 	}
