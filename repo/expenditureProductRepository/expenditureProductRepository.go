@@ -72,7 +72,7 @@ func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter Get
 	if filter.IsExport {
 		query = query.Order("tgl_pabean ASC")
 	} else {
-		query = query.Order("created_at DESC")
+		query = query.Order("tgl_pabean DESC")
 	}
 	err = query.Find(&results).Error
 	return results, totalCount, err
