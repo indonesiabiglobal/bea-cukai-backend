@@ -59,6 +59,7 @@ func (c *EntryProductController) GetReport(ctx *gin.Context) {
 		ProductName:  productName,
 		Page:         page,
 		Limit:        limit,
+		IsExport:     false,
 	}
 
 	res, totalCount, err := c.EntryProductService.GetReport(filter)
@@ -142,6 +143,7 @@ func (c *EntryProductController) ExportExcel(ctx *gin.Context) {
 		ProductName:  productName,
 		Page:         0, // No pagination
 		Limit:        0, // No limit
+		IsExport:     true,
 	}
 
 	res, _, err := c.EntryProductService.GetReport(filter)

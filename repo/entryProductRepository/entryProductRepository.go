@@ -42,6 +42,7 @@ type GetReportFilter struct {
 	ProductName  string
 	Page         int
 	Limit        int
+	IsExport     bool
 }
 
 // GetReport retrieves entry products with filters and pagination
@@ -82,6 +83,11 @@ func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReport
 	}
 
 	var results []model.EntryProduct
-	err = query.Order("tgl_pabean DESC").Find(&results).Error
+	if filter.IsExport {
+		query = query.Order("tgl_pabean ASC")
+	} else {
+		query = query.Order("created_at DESC")
+	}
+	err = query.Find(&results).Error
 	return results, totalCount, err
 }

@@ -58,6 +58,7 @@ func (c *ExpenditureProductController) GetReport(ctx *gin.Context) {
 		ProductName:  productName,
 		Page:         page,
 		Limit:        limit,
+		IsExport:     false,
 	}
 	res, totalCount, err := c.ExpenditureProductService.GetReport(filter)
 	if err != nil {
@@ -140,6 +141,7 @@ func (c *ExpenditureProductController) ExportExcel(ctx *gin.Context) {
 		ProductName:  productName,
 		Page:         0, // No pagination
 		Limit:        0, // No limit
+		IsExport:     true,
 	}
 
 	res, _, err := c.ExpenditureProductService.GetReport(filter)
