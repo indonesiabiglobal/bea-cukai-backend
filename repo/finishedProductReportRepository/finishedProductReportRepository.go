@@ -153,6 +153,7 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 		filter.To.Format("2006-01-02"),
 		tglInvAkhir.Format("2006-01-02"),
 	}
+	fmt.Println(queryArgs...)
 	queryArgs = append(queryArgs, args...)
 
 	// Get total count first

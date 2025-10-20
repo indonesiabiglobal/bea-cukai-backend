@@ -234,8 +234,9 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 		mskFloat, _ := item.Msk.Float64()
 		keluarFloat, _ := item.Keluar.Float64()
 		penyFloat, _ := item.Peny.Float64()
-		akhrFloat, _ := item.Akhr.Float64()
+		AkhirFloat, _ := item.Akhir.Float64()
 		selisihFloat, _ := item.Selisih.Float64()
+		opnameFloat, _ := item.Opname.Float64()
 
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.ItemCode)
@@ -245,8 +246,8 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), mskFloat)
 		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluarFloat)
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), penyFloat)
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), akhrFloat)
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), akhrFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), AkhirFloat)
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), opnameFloat)
 		f.SetCellValue(sheetName, fmt.Sprintf("K%d", row), selisihFloat)
 		f.SetCellValue(sheetName, fmt.Sprintf("L%d", row), "")
 	}
