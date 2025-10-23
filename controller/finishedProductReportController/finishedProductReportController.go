@@ -122,6 +122,7 @@ func (c *FinishedProductReportController) ExportExcel(ctx *gin.Context) {
 		Page:     0, // No pagination for export
 		Limit:    0, // Get all data
 	}
+	fmt.Println(filter)
 
 	res, _, err := c.FinishedProductReportService.GetReport(filter)
 	if err != nil {
@@ -234,7 +235,7 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 		mskFloat, _ := item.Msk.Float64()
 		keluarFloat, _ := item.Keluar.Float64()
 		penyFloat, _ := item.Peny.Float64()
-		AkhirFloat, _ := item.Akhir.Float64()
+		AkhirFloat, _ := item.Akhr.Float64()
 		selisihFloat, _ := item.Selisih.Float64()
 		opnameFloat, _ := item.Opname.Float64()
 

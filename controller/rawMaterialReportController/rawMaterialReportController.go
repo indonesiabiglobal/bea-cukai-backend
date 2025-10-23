@@ -287,10 +287,10 @@ func (c *RawMaterialReportController) generateExcelFile(data []model.RawMaterial
 		penyFloat, _ := rawMaterial.Peny.Float64()
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), penyFloat)                     // Penyesuaian
 		
-		akhirFloat, _ := rawMaterial.Akhir.Float64()
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), akhirFloat)                    // Saldo Akhir
-		
+		// akhirFloat, _ := rawMaterial.Akhir.Float64()
 		opnameFloat, _ := rawMaterial.Opname.Float64()
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), opnameFloat)                    // Saldo Akhir
+		
 		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), opnameFloat)                   // Stok Opname
 		
 		selisihFloat, _ := rawMaterial.Selisih.Float64()

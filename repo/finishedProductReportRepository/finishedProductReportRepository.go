@@ -38,7 +38,7 @@ func (r *FinishedProductReportRepository) getMaxProductHarianDate(ctx context.Co
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_produk_harian_head").
 		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
-		Where("trans_date <= ?", beforeDate).
+		Where("trans_date <= ?", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
 	if err != nil {
@@ -137,7 +137,7 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 			LEFT JOIN f ON a.item_code = f.item_code 
 			WHERE a.item_group = 'PRODUCT' %s
 		)
-		SELECT a.*, opname as akhr, masuk - (akhir - opname) as msk 
+		SELECT a.*, opname as akhr, IFNULL(masuk-(akhir-opname),0) as msk 
 		FROM a 
 		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0 OR opname <> 0
 	`, whereConditions)
@@ -153,7 +153,6 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 		filter.To.Format("2006-01-02"),
 		tglInvAkhir.Format("2006-01-02"),
 	}
-	fmt.Println(queryArgs...)
 	queryArgs = append(queryArgs, args...)
 
 	// Get total count first

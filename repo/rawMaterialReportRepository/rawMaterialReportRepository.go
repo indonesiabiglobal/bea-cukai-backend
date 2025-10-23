@@ -38,7 +38,7 @@ func (r *RawMaterialReportRepository) getMaxMaterialHarianDate(ctx context.Conte
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_material_harian_head").
 		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
-		Where("trans_date <= ?", beforeDate).
+		Where("trans_date <= ?", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
 	if err != nil {
