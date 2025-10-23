@@ -38,7 +38,7 @@ func (r *MachineToolReportRepository) getMaxOpnameDate(ctx context.Context, befo
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_opname_head").
 		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
-		Where("trans_date <= ? AND item_group = 'MESIN'", beforeDate).
+		Where("trans_date <= ? AND item_group = 'MESIN'", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
 	if err != nil {
