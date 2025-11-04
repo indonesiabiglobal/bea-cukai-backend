@@ -36,7 +36,7 @@ type GetReportFilter struct {
 func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
 	from, to := filter.From, filter.To
 	query := c.db.WithContext(ctx).Model(&model.ExpenditureProduct{}).
-		Where("trans_date BETWEEN ? AND ?", from.Format("2006-01-02"), to.Format("2006-01-02"))
+		Where("tgl_pabean BETWEEN ? AND ?", from.Format("2006-01-02"), to.Format("2006-01-02"))
 
 	// Apply filters if provided
 	if filter.PabeanType != "" {
