@@ -222,7 +222,7 @@ func (c *ExpenditureProductController) generateExcelFile(data []model.Expenditur
 
 	// Set table headers starting from row 5
 	headers := [][]string{
-		{"No.", "DOKUMEN PABEAN", "", "", "BUKTI PENGELUARAN BARANG", "", "PENERIMA BARANG", "KODE BARANG", "NAMA BARANG", "JUMLAH", "SATUAN", "VALAS", "NILAI"},
+		{"No.", "DOKUMEN PABEAN", "", "", "SURAT JALAN", "", "PENERIMA BARANG", "KODE BARANG", "NAMA BARANG", "JUMLAH", "SATUAN", "VALAS", "NILAI"},
 		{"", "JENIS", "NOMOR", "TANGGAL", "NOMOR", "TANGGAL", "", "", "", "", "", "", ""},
 	}
 
@@ -243,7 +243,7 @@ func (c *ExpenditureProductController) generateExcelFile(data []model.Expenditur
 	// Merge header cells
 	f.MergeCell(sheetName, "A5", "A6") // No.
 	f.MergeCell(sheetName, "B5", "D5") // DOKUMEN PABEAN
-	f.MergeCell(sheetName, "E5", "F5") // BUKTI PENGELUARAN BARANG
+	f.MergeCell(sheetName, "E5", "F5") // SURAT JALAN
 	f.MergeCell(sheetName, "G5", "G6") // PENERIMA BARANG
 	f.MergeCell(sheetName, "H5", "H6") // KODE BARANG
 	f.MergeCell(sheetName, "I5", "I6") // NAMA BARANG
