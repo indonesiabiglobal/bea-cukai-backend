@@ -90,8 +90,10 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 		LEFT JOIN (
 			SELECT b.item_code, SUM(b.qty) as awal 
 			FROM tr_inv_opname_head a 
-			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no 
-			WHERE a.trans_date = ?
+			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no
+			INNER JOIN ms_item item ON item.item_code = b.item_code 
+			WHERE a.trans_date = ? AND
+			item.item_group = ?
 			GROUP BY b.item_code
 		) as b ON a.item_code = b.item_code 
 		LEFT JOIN (
@@ -101,7 +103,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 				item.item_name 
 			FROM
 				tr_pemasukan_barang pb
-				RIGHT JOIN ms_item item ON item.item_code = pb.item_code 
+				INNER JOIN ms_item item ON item.item_code = pb.item_code 
 			WHERE
 				item.item_group = ? AND
 				pb.trans_date BETWEEN ? AND ? 
@@ -132,6 +134,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 	// Prepare arguments for the complex query
 	queryArgs := []interface{}{
 		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // DATE_SUB for beginning balance
+		filter.Lap,                       // Item group for awal query
 		filter.Lap,                       // Item group for masuk query
 		filter.From.Format("2006-01-02"), // Masuk start date
 		filter.To.Format("2006-01-02"),   // Masuk end date
