@@ -128,6 +128,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 			GROUP BY b.item_code
 		) as f ON a.item_code = f.item_code 
 		WHERE a.item_group = ? %s
+		AND a.item_code NOT IN ('IK0107', 'TL0001', 'IT0105')
 		HAVING awal <> 0 OR masuk <> 0 OR keluar <> 0 OR peny <> 0 OR akhir <> 0 OR opname <> 0
 	`, whereConditions)
 

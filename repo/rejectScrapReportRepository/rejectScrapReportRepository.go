@@ -209,8 +209,7 @@ func (r *RejectScrapReportRepository) GetReport(ctx context.Context, filter GetR
 	// Process results like PHP does - apply number formatting and keluar calculation
 	var results []model.RejectScrapReportResponse
 	for _, raw := range rawResults {
-		// Calculate keluar as in PHP: keluar + opname - akhir
-		calculatedKeluar := raw.Keluar + raw.Opname - raw.Akhir
+		calculatedKeluar := raw.Awal + raw.Masuk - raw.Opname
 
 		result := model.RejectScrapReportResponse{
 			ItemCode:     raw.ItemCode,
