@@ -262,23 +262,20 @@ func (c *AuxiliaryMaterialReportController) generateExcelFile(data []model.Auxil
 		// Convert string values to float for proper display
 		awal, _ := strconv.ParseFloat(item.Awal, 64)
 		masuk, _ := strconv.ParseFloat(item.Masuk, 64)
-		keluarOriginal, _ := strconv.ParseFloat(item.Keluar, 64)
+		keluar, _ := strconv.ParseFloat(item.Keluar, 64)
 		peny, _ := strconv.ParseFloat(item.Peny, 64)
-		akhir, _ := strconv.ParseFloat(item.Akhir, 64)
 		opname, _ := strconv.ParseFloat(item.Opname, 64)
 		selisih, _ := strconv.ParseFloat(item.Selisih, 64)
 
 		// Apply the special calculation for "keluar" as per PHP template:
 		// $row["keluar"] = $row["keluar"] + $row["opname"] - $row["akhir"];
-		keluarCalculated := keluarOriginal + opname - akhir
-
 		f.SetCellValue(sheetName, fmt.Sprintf("A%d", row), i+1)
 		f.SetCellValue(sheetName, fmt.Sprintf("B%d", row), item.ItemCode)
 		f.SetCellValue(sheetName, fmt.Sprintf("C%d", row), item.ItemName)
 		f.SetCellValue(sheetName, fmt.Sprintf("D%d", row), item.UnitCode)
 		f.SetCellValue(sheetName, fmt.Sprintf("E%d", row), awal)
 		f.SetCellValue(sheetName, fmt.Sprintf("F%d", row), masuk)
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluarCalculated) // Using calculated value
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", row), keluar) // Using calculated value
 		f.SetCellValue(sheetName, fmt.Sprintf("H%d", row), peny)
 		f.SetCellValue(sheetName, fmt.Sprintf("I%d", row), opname)
 		f.SetCellValue(sheetName, fmt.Sprintf("J%d", row), opname)

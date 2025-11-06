@@ -82,10 +82,10 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 		SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code, 
 			IFNULL(b.awal, 0) as awal,
 			IFNULL(c.masuk, 0) as masuk,
-			0 as keluar,
 			IFNULL(e.peny, 0) as peny,
 			0 as akhir,
-			IFNULL(f.opname, 0) as opname
+			IFNULL(f.opname, 0) as opname,
+			(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) - IFNULL(f.opname, 0)) as keluar
 		FROM ms_item a 
 		LEFT JOIN (
 			SELECT b.item_code, SUM(b.qty) as awal 
@@ -95,12 +95,20 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 			GROUP BY b.item_code
 		) as b ON a.item_code = b.item_code 
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as masuk 
-			FROM tr_ap_inv_head_fki a 
-			INNER JOIN tr_ap_inv_det_direct_fki b ON a.trans_no = b.trans_no 
-			INNER JOIN ms_item c ON b.item_code = c.item_code 
-			WHERE c.item_group = ? AND a.trans_date BETWEEN ? AND ?
-			GROUP BY b.item_code
+			SELECT
+				pb.item_code,
+				SUM( pb.rcv_qty ) AS masuk,
+				item.item_name 
+			FROM
+				tr_pemasukan_barang pb
+				RIGHT JOIN ms_item item ON item.item_code = pb.item_code 
+			WHERE
+				item.item_group = ? AND
+				pb.trans_date BETWEEN ? AND ? 
+			GROUP BY
+				item_code
+			ORDER BY 
+				item_code
 		) as c ON a.item_code = c.item_code 
 		LEFT JOIN (
 			SELECT b.item_code, SUM(qty) as peny 
@@ -118,6 +126,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 			GROUP BY b.item_code
 		) as f ON a.item_code = f.item_code 
 		WHERE a.item_group = ? %s
+		HAVING awal <> 0 OR masuk <> 0 OR keluar <> 0 OR peny <> 0 OR akhir <> 0 OR opname <> 0
 	`, whereConditions)
 
 	// Prepare arguments for the complex query
@@ -175,12 +184,9 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 		return nil, 0, err
 	}
 
-	// Process results like PHP does - apply number formatting and keluar calculation
+	// Process results like PHP does - apply number formatting
 	var results []model.AuxiliaryMaterialReportResponse
 	for _, raw := range rawResults {
-		// Calculate keluar as in PHP: keluar + opname - akhir
-		calculatedKeluar := raw.Keluar + raw.Opname - raw.Akhir
-
 		result := model.AuxiliaryMaterialReportResponse{
 			ItemCode:     raw.ItemCode,
 			ItemName:     raw.ItemName,
@@ -190,7 +196,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 			LocationCode: raw.LocationCode,
 			Awal:         formatNumber(raw.Awal, 2),
 			Masuk:        formatNumber(raw.Masuk, 2),
-			Keluar:       formatNumber(calculatedKeluar, 2),
+			Keluar:       formatNumber(raw.Keluar, 2), // Keluar sudah dihitung di SQL
 			Peny:         formatNumber(raw.Peny, 2),
 			Akhir:        strconv.FormatFloat(raw.Akhir, 'f', -1, 64),
 			Opname:       formatNumber(raw.Opname, 2),
