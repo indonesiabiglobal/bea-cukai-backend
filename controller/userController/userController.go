@@ -46,7 +46,11 @@ func (u *UserController) CreateUser(ctx *gin.Context) {
 		return
 	}
 
-	userResponse, err := u.UserService.CreateUser(userRequest)
+	// Get IP address and user agent
+	ipAddress := helper.GetIPAddress(ctx)
+	userAgent := helper.GetUserAgent(ctx)
+
+	userResponse, err := u.UserService.CreateUser(userRequest, ipAddress, userAgent)
 	if err != nil {
 		if err.Error() == "email already exists" || err.Error() == "username already exists" {
 			ctx.JSON(http.StatusBadRequest, gin.H{
@@ -88,8 +92,12 @@ func (u *UserController) LoginUser(ctx *gin.Context) {
 		return
 	}
 
+	// Get IP address and user agent
+	ipAddress := helper.GetIPAddress(ctx)
+	userAgent := helper.GetUserAgent(ctx)
+
 	var token string
-	token, err = u.UserService.LoginUser(userRequest)
+	token, err = u.UserService.LoginUser(userRequest, ipAddress, userAgent)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"message": "fail login",
@@ -128,12 +136,16 @@ func (u *UserController) UpdateUser(ctx *gin.Context) {
 
 	// get user data from token
 	userData := ctx.MustGet("userData").(jwt.MapClaims)
-	idUser := userData["id_user"].(string)
+	id := userData["id"].(string)
+
+	// Get IP address and user agent
+	ipAddress := helper.GetIPAddress(ctx)
+	userAgent := helper.GetUserAgent(ctx)
 
 	// call service to update user
-	userResponse, err := u.UserService.UpdateUser(userRequest, idUser)
+	userResponse, err := u.UserService.UpdateUser(userRequest, id, ipAddress, userAgent)
 	if err != nil {
-		if err.Error() == "nm_user already exists" {
+		if err.Error() == "username already exists" {
 			ctx.JSON(http.StatusBadRequest, gin.H{
 				"message": "fail update user",
 				"error":   err.Error(),
@@ -152,9 +164,13 @@ func (u *UserController) UpdateUser(ctx *gin.Context) {
 
 func (u *UserController) DeleteUser(ctx *gin.Context) {
 	userData := ctx.MustGet("userData").(jwt.MapClaims)
-	idUser := userData["id_user"].(string)
+	id := userData["id"].(string)
 
-	err := u.UserService.DeleteUser(idUser)
+	// Get IP address and user agent
+	ipAddress := helper.GetIPAddress(ctx)
+	userAgent := helper.GetUserAgent(ctx)
+
+	err := u.UserService.DeleteUser(id, ipAddress, userAgent)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			ctx.JSON(http.StatusNotFound, gin.H{
@@ -177,8 +193,8 @@ func (u *UserController) DeleteUser(ctx *gin.Context) {
 
 // GetAll retrieves all users with optional filtering and pagination
 // Query parameters:
-// - id_user: filter by user ID (partial match)
-// - nm_user: filter by username (partial match)
+// - id: filter by user ID (partial match)
+// - username: filter by username (partial match)
 // - level: filter by user level (exact match)
 // - page: page number (default: 1)
 // - limit: items per page (default: 10)
@@ -186,8 +202,8 @@ func (u *UserController) GetAll(ctx *gin.Context) {
 	var req model.UserListRequest
 
 	// Parse query parameters
-	req.IdUser = ctx.Query("id_user")
-	req.NmUser = ctx.Query("nm_user")
+	req.Id = ctx.Query("id")
+	req.Username = ctx.Query("username")
 	req.Level = ctx.Query("level")
 
 	// Parse pagination parameters
@@ -218,10 +234,10 @@ func (u *UserController) GetAll(ctx *gin.Context) {
 func (u *UserController) GetProfile(ctx *gin.Context) {
 	// Get user data from JWT token
 	userData := ctx.MustGet("userData").(jwt.MapClaims)
-	idUser := userData["id_user"].(string)
+	id := userData["id"].(string)
 
 	// Get profile from service
-	profile, err := u.UserService.GetProfile(idUser)
+	profile, err := u.UserService.GetProfile(id)
 	if err != nil {
 		if err.Error() == "user not found" {
 			ctx.JSON(http.StatusNotFound, gin.H{
@@ -249,15 +265,15 @@ func (u *UserController) GetProfile(ctx *gin.Context) {
 func (u *UserController) LogoutUser(ctx *gin.Context) {
 	// Get user data from JWT token
 	userData := ctx.MustGet("userData").(jwt.MapClaims)
-	idUser := userData["id_user"].(string)
-	nmUser := userData["nm_user"].(string)
+	id := userData["id"].(string)
+	username := userData["username"].(string)
 
 	// Return successful logout response
 	ctx.JSON(http.StatusOK, gin.H{
 		"message": "Logout successful",
 		"data": gin.H{
-			"id_user":     idUser,
-			"nm_user":     nmUser,
+			"id":     id,
+			"username":     username,
 			"logged_out":  true,
 			"logout_time": time.Now().Format(time.RFC3339),
 			"note":        "Please remove the token from client storage",

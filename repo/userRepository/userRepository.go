@@ -19,8 +19,8 @@ func NewUserRepository(db *gorm.DB) *UserRepository {
 // CreateUser implements UserRepository
 func (u *UserRepository) CreateUser(user model.UserRequest) (model.User, error) {
 	userModel := model.User{
-		IdUser:   user.IdUser,
-		NmUser:   user.NmUser,
+		Id:   user.Id,
+		Username:   user.Username,
 		Password: user.Password,
 		Level:    user.Level,
 	}
@@ -34,7 +34,7 @@ func (u *UserRepository) CreateUser(user model.UserRequest) (model.User, error) 
 // LoginUser implements UserRepository
 func (u *UserRepository) LoginUser(userLogin model.UserLoginRequest) (model.User, error) {
 	user := model.User{}
-	err := u.db.Where("nm_user = ?", userLogin.NmUser).First(&user).Error
+	err := u.db.Where("username = ?", userLogin.Username).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
@@ -43,16 +43,16 @@ func (u *UserRepository) LoginUser(userLogin model.UserLoginRequest) (model.User
 }
 
 // UpdateUser implements UserRepository
-func (u *UserRepository) UpdateUser(userRequest model.UserUpdateRequest, idUser string) (model.User, error) {
+func (u *UserRepository) UpdateUser(userRequest model.UserUpdateRequest, id string) (model.User, error) {
 	var user model.User
 
-	// Mencari pengguna dengan idUser yang diberikan
-	err := u.db.Where("id_user = ?", idUser).First(&user).Error
+	// Mencari pengguna dengan id yang diberikan
+	err := u.db.Where("id = ?", id).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
 
-	user.NmUser = userRequest.NmUser
+	user.Username = userRequest.Username
 	if userRequest.Password != "" {
 		user.Password = userRequest.Password
 	}
@@ -66,8 +66,8 @@ func (u *UserRepository) UpdateUser(userRequest model.UserUpdateRequest, idUser 
 }
 
 // DeleteUser implements UserRepository
-func (u *UserRepository) DeleteUser(idUser string) error {
-	result := u.db.Where("id_user = ?", idUser).Delete(&model.User{})
+func (u *UserRepository) DeleteUser(id string) error {
+	result := u.db.Where("id = ?", id).Delete(&model.User{})
 	if result.Error != nil {
 		return result.Error
 	}
@@ -77,29 +77,29 @@ func (u *UserRepository) DeleteUser(idUser string) error {
 	return nil
 }
 
-// GetUserByNmUser - get user by nm_user (username)
-func (u *UserRepository) GetUserByNmUser(nmUser string) (model.User, error) {
+// GetUserByUsername - get user by username (username)
+func (u *UserRepository) GetUserByUsername(username string) (model.User, error) {
 	var user model.User
-	err := u.db.Where("nm_user = ?", nmUser).First(&user).Error
+	err := u.db.Where("username = ?", username).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
 	return user, nil
 }
 
-// GetUserByIdUser - get user by id_user
-func (u *UserRepository) GetUserByIdUser(idUser string) (model.User, error) {
+// GetUserById - get user by id
+func (u *UserRepository) GetUserById(id string) (model.User, error) {
 	var user model.User
-	err := u.db.Where("id_user = ?", idUser).First(&user).Error
+	err := u.db.Where("id = ?", id).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
 	return user, nil
 }
 
-// GetProfile - get user profile by id_user (alias for GetUserByIdUser for clarity)
-func (u *UserRepository) GetProfile(idUser string) (model.User, error) {
-	return u.GetUserByIdUser(idUser)
+// GetProfile - get user profile by id (alias for GetUserById for clarity)
+func (u *UserRepository) GetProfile(id string) (model.User, error) {
+	return u.GetUserById(id)
 }
 
 // GetAll - get all users with filtering and pagination
@@ -111,11 +111,11 @@ func (u *UserRepository) GetAll(req model.UserListRequest) ([]model.User, int64,
 	query := u.db.Model(&model.User{})
 
 	// Apply filters
-	if req.IdUser != "" {
-		query = query.Where("id_user LIKE ?", "%"+req.IdUser+"%")
+	if req.Id != "" {
+		query = query.Where("id LIKE ?", "%"+req.Id+"%")
 	}
-	if req.NmUser != "" {
-		query = query.Where("nm_user LIKE ?", "%"+req.NmUser+"%")
+	if req.Username != "" {
+		query = query.Where("username LIKE ?", "%"+req.Username+"%")
 	}
 	if req.Level != "" {
 		query = query.Where("level = ?", req.Level)
@@ -133,9 +133,28 @@ func (u *UserRepository) GetAll(req model.UserListRequest) ([]model.User, int64,
 	}
 
 	// Execute query with ordering
-	if err := query.Order("id_user ASC").Find(&users).Error; err != nil {
+	if err := query.Order("id ASC").Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
 
 	return users, total, nil
+}
+
+// UpdateLoginInfo - update login count, last login time and IP
+func (u *UserRepository) UpdateLoginInfo(id string, ipAddress string) error {
+	updates := map[string]interface{}{
+		"login_count":   gorm.Expr("login_count + 1"),
+		"last_login_at": gorm.Expr("NOW()"),
+		"last_login_ip": ipAddress,
+	}
+
+	result := u.db.Model(&model.User{}).Where("id = ?", id).Updates(updates)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+
+	return nil
 }

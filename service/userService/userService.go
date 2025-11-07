@@ -3,41 +3,65 @@ package userService
 import (
 	"Bea-Cukai/helper"
 	"Bea-Cukai/model"
+	"Bea-Cukai/repo/userLogRepository"
 	"Bea-Cukai/repo/userRepository"
 	"errors"
+	"fmt"
 
 	"github.com/jinzhu/copier"
 	"gorm.io/gorm"
 )
 
 type UserService struct {
-	userRepo *userRepository.UserRepository
+	userRepo    *userRepository.UserRepository
+	userLogRepo *userLogRepository.UserLogRepository
 }
 
-func NewUserService(userRepository *userRepository.UserRepository) *UserService {
+func NewUserService(userRepository *userRepository.UserRepository, userLogRepository *userLogRepository.UserLogRepository) *UserService {
 	return &UserService{
-		userRepo: userRepository,
+		userRepo:    userRepository,
+		userLogRepo: userLogRepository,
 	}
 }
 
 // CreateUser implements UserService
-func (u *UserService) CreateUser(userRequest model.UserRequest) (model.UserResponse, error) {
-	// validate id_user
-	_, err := u.userRepo.GetUserByIdUser(userRequest.IdUser)
+func (u *UserService) CreateUser(userRequest model.UserRequest, ipAddress, userAgent string) (model.UserResponse, error) {
+	// validate id
+	_, err := u.userRepo.GetUserById(userRequest.Id)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return model.UserResponse{}, err
 	}
 	if err != gorm.ErrRecordNotFound {
-		return model.UserResponse{}, errors.New("id_user already exists")
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    userRequest.Id,
+			Username:  userRequest.Username,
+			Action:    "create",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   "ID already exists",
+		})
+		return model.UserResponse{}, errors.New("id already exists")
 	}
 
-	// validate nm_user
-	_, err = u.userRepo.GetUserByNmUser(userRequest.NmUser)
+	// validate username
+	_, err = u.userRepo.GetUserByUsername(userRequest.Username)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return model.UserResponse{}, err
 	}
 	if err != gorm.ErrRecordNotFound {
-		return model.UserResponse{}, errors.New("nm_user already exists")
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    userRequest.Id,
+			Username:  userRequest.Username,
+			Action:    "create",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   "Username already exists",
+		})
+		return model.UserResponse{}, errors.New("username already exists")
 	}
 
 	// hash password
@@ -50,8 +74,29 @@ func (u *UserService) CreateUser(userRequest model.UserRequest) (model.UserRespo
 	// call repository to save user
 	createdUser, err := u.userRepo.CreateUser(userRequest)
 	if err != nil {
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    userRequest.Id,
+			Username:  userRequest.Username,
+			Action:    "create",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   err.Error(),
+		})
 		return model.UserResponse{}, err
 	}
+
+	// Log successful creation
+	u.userLogRepo.CreateLog(model.UserLogRequest{
+		UserId:    createdUser.Id,
+		Username:  createdUser.Username,
+		Action:    "create",
+		IpAddress: ipAddress,
+		UserAgent: userAgent,
+		Status:    "success",
+		Message:   "User created successfully",
+	})
 
 	var userResponse model.UserResponse
 	err = copier.Copy(&userResponse, &createdUser)
@@ -63,39 +108,114 @@ func (u *UserService) CreateUser(userRequest model.UserRequest) (model.UserRespo
 }
 
 // LoginUser implements UserService
-func (u *UserService) LoginUser(userLogin model.UserLoginRequest) (string, error) {
+func (u *UserService) LoginUser(userLogin model.UserLoginRequest, ipAddress, userAgent string) (string, error) {
 	// call repository to get user
 	user, err := u.userRepo.LoginUser(userLogin)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return "", errors.New("username or password is incorrect")
+			// Log failed login attempt
+			_, logErr := u.userLogRepo.CreateLog(model.UserLogRequest{
+				Username:  userLogin.Username,
+				Action:    "login",
+				IpAddress: ipAddress,
+				UserAgent: userAgent,
+				Status:    "failed",
+				Message:   "User not found",
+			})
+			if logErr != nil {
+				// Print error for debugging (in production, use proper logging)
+				// fmt.Printf("Error logging failed login: %v\n", logErr)
+			}
+			return "", errors.New("Username or Password is incorrect")
 		}
 		return "", err
 	}
 
-	// match := helper.CheckPasswordHash(userLogin.Password, user.Password)
-	match := userLogin.Password == user.Password
+	// verify password hash
+	match := helper.CheckPasswordHash(userLogin.Password, user.Password)
 	if !match {
-		return "", errors.New("username or password is incorrect")
+		// Log failed login attempt
+		_, logErr := u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    user.Id,
+			Username:  user.Username,
+			Action:    "login",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   "Invalid password",
+		})
+		if logErr != nil {
+			// Print error for debugging
+			// fmt.Printf("Error logging failed login: %v\n", logErr)
+		}
+		return "", errors.New("Username or Password is incorrect")
 	}
 
-	token, err := helper.GenerateToken(user.IdUser, user.NmUser)
+	// Generate token
+	token, err := helper.GenerateToken(user.Id, user.Username)
 	if err != nil {
 		return "", err
+	}
+
+	// Update login info (count, last login time, last login IP)
+	err = u.userRepo.UpdateLoginInfo(user.Id, ipAddress)
+	if err != nil {
+		// Log but don't fail the login
+		_, logErr := u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    user.Id,
+			Username:  user.Username,
+			Action:    "login",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "warning",
+			Message:   "Failed to update login info: " + err.Error(),
+		})
+		if logErr != nil {
+			// Print error for debugging
+			// fmt.Printf("Error creating warning log: %v\n", logErr)
+		}
+	}
+
+	// Log successful login
+	_, logErr := u.userLogRepo.CreateLog(model.UserLogRequest{
+		UserId:    user.Id,
+		Username:  user.Username,
+		Action:    "login",
+		IpAddress: ipAddress,
+		UserAgent: userAgent,
+		Status:    "success",
+		Message:   "Login successful",
+	})
+	fmt.Println(logErr)
+	fmt.Println("masuk")
+	if logErr != nil {
+		// Don't fail login if logging fails, but we should know about it
+		// In production, use proper logging framework
+		// fmt.Printf("Error logging successful login: %v\n", logErr)
 	}
 
 	return token, nil
 }
 
 // update user
-func (u *UserService) UpdateUser(userRequest model.UserUpdateRequest, idUser string) (model.UserResponse, error) {
-	// validate nm_user
-	user, err := u.userRepo.GetUserByNmUser(userRequest.NmUser)
+func (u *UserService) UpdateUser(userRequest model.UserUpdateRequest, id string, ipAddress, userAgent string) (model.UserResponse, error) {
+	// validate username
+	user, err := u.userRepo.GetUserByUsername(userRequest.Username)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return model.UserResponse{}, err
 	}
-	if err != gorm.ErrRecordNotFound && user.IdUser != idUser {
-		return model.UserResponse{}, errors.New("nm_user already exists")
+	if err != gorm.ErrRecordNotFound && user.Id != id {
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    id,
+			Username:  userRequest.Username,
+			Action:    "update",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   "Username already exists",
+		})
+		return model.UserResponse{}, errors.New("Username already exists")
 	}
 
 	// hash password if provided
@@ -108,10 +228,31 @@ func (u *UserService) UpdateUser(userRequest model.UserUpdateRequest, idUser str
 	}
 
 	// call repository to update user
-	updatedUser, err := u.userRepo.UpdateUser(userRequest, idUser)
+	updatedUser, err := u.userRepo.UpdateUser(userRequest, id)
 	if err != nil {
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    id,
+			Username:  userRequest.Username,
+			Action:    "update",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   err.Error(),
+		})
 		return model.UserResponse{}, err
 	}
+
+	// Log successful update
+	u.userLogRepo.CreateLog(model.UserLogRequest{
+		UserId:    updatedUser.Id,
+		Username:  updatedUser.Username,
+		Action:    "update",
+		IpAddress: ipAddress,
+		UserAgent: userAgent,
+		Status:    "success",
+		Message:   "User updated successfully",
+	})
 
 	var userResponse model.UserResponse
 	err = copier.Copy(&userResponse, &updatedUser)
@@ -123,12 +264,48 @@ func (u *UserService) UpdateUser(userRequest model.UserUpdateRequest, idUser str
 }
 
 // delete user
-func (u *UserService) DeleteUser(idUser string) error {
-	// call repository to delete user
-	err := u.userRepo.DeleteUser(idUser)
+func (u *UserService) DeleteUser(id string, ipAddress, userAgent string) error {
+	// Get user info first for logging
+	user, err := u.userRepo.GetUserById(id)
 	if err != nil {
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    id,
+			Action:    "delete",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   "User not found",
+		})
 		return err
 	}
+
+	// call repository to delete user
+	err = u.userRepo.DeleteUser(id)
+	if err != nil {
+		// Log failed attempt
+		u.userLogRepo.CreateLog(model.UserLogRequest{
+			UserId:    id,
+			Username:  user.Username,
+			Action:    "delete",
+			IpAddress: ipAddress,
+			UserAgent: userAgent,
+			Status:    "failed",
+			Message:   err.Error(),
+		})
+		return err
+	}
+
+	// Log successful deletion
+	u.userLogRepo.CreateLog(model.UserLogRequest{
+		UserId:    id,
+		Username:  user.Username,
+		Action:    "delete",
+		IpAddress: ipAddress,
+		UserAgent: userAgent,
+		Status:    "success",
+		Message:   "User deleted successfully",
+	})
 
 	return nil
 }
@@ -153,9 +330,12 @@ func (u *UserService) GetAll(req model.UserListRequest) ([]model.UserResponse, i
 	var userResponses []model.UserResponse
 	for _, user := range users {
 		userResponse := model.UserResponse{
-			IdUser: user.IdUser,
-			NmUser: user.NmUser,
-			Level:  user.Level,
+			Id:          user.Id,
+			Username:    user.Username,
+			Level:       user.Level,
+			LoginCount:  user.LoginCount,
+			LastLoginAt: user.LastLoginAt,
+			LastLoginIp: user.LastLoginIp,
 		}
 		userResponses = append(userResponses, userResponse)
 	}
@@ -178,10 +358,10 @@ func (u *UserService) GetAll(req model.UserListRequest) ([]model.UserResponse, i
 	return userResponses, total, meta, nil
 }
 
-// GetProfile - get user profile by id_user
-func (u *UserService) GetProfile(idUser string) (model.UserResponse, error) {
+// GetProfile - get user profile by id
+func (u *UserService) GetProfile(id string) (model.UserResponse, error) {
 	// Get user from repository
-	user, err := u.userRepo.GetProfile(idUser)
+	user, err := u.userRepo.GetProfile(id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return model.UserResponse{}, errors.New("user not found")
@@ -191,9 +371,12 @@ func (u *UserService) GetProfile(idUser string) (model.UserResponse, error) {
 
 	// Convert to response format (exclude password)
 	userResponse := model.UserResponse{
-		IdUser: user.IdUser,
-		NmUser: user.NmUser,
-		Level:  user.Level,
+		Id:          user.Id,
+		Username:    user.Username,
+		Level:       user.Level,
+		LoginCount:  user.LoginCount,
+		LastLoginAt: user.LastLoginAt,
+		LastLoginIp: user.LastLoginIp,
 	}
 
 	return userResponse, nil

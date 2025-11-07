@@ -245,6 +245,7 @@ CREATE TABLE IF NOT EXISTS tr_ap_inv_head_fki_backup LIKE tr_ap_inv_head_fki;
 CREATE TABLE IF NOT EXISTS tr_ar_inv_det_direct_fki_backup LIKE tr_ar_inv_det_direct_fki;
 CREATE TABLE IF NOT EXISTS tr_ar_inv_head_fki_backup LIKE tr_ar_inv_head_fki;
 CREATE TABLE IF NOT EXISTS user_backup LIKE user;
+CREATE TABLE IF NOT EXISTS user_log_backup LIKE user_log;
 INSERT INTO tr_pemasukan_barang_backup SELECT * FROM tr_pemasukan_barang;
 INSERT INTO tr_pengeluaran_barang_backup SELECT * FROM tr_pengeluaran_barang;
 INSERT INTO tr_ap_inv_det_direct_fki_backup SELECT * FROM tr_ap_inv_det_direct_fki;
@@ -252,6 +253,7 @@ INSERT INTO tr_ap_inv_head_fki_backup SELECT * FROM tr_ap_inv_head_fki;
 INSERT INTO tr_ar_inv_det_direct_fki_backup SELECT * FROM tr_ar_inv_det_direct_fki;
 INSERT INTO tr_ar_inv_head_fki_backup SELECT * FROM tr_ar_inv_head_fki;
 INSERT INTO user_backup SELECT * FROM user;
+INSERT INTO user_log_backup SELECT * FROM user_log;
 " 2>/dev/null || log "Tabel backup mungkin belum ada, skip backup..."
 
 log "Import ke ${FINAL_DB} (DROP TABLE terlebih dahulu kecuali tabel yang dipertahankan)..."
@@ -262,10 +264,11 @@ FROM information_schema.TABLES
 WHERE TABLE_SCHEMA = '${FINAL_DB}'
   AND TABLE_NAME NOT IN ('tr_pemasukan_barang', 'tr_pengeluaran_barang',
                           'tr_ap_inv_det_direct_fki', 'tr_ap_inv_head_fki',
-                          'tr_ar_inv_det_direct_fki', 'tr_ar_inv_head_fki', 'user',
+                          'tr_ar_inv_det_direct_fki', 'tr_ar_inv_head_fki', 'user', 'user_log',
                           'tr_pemasukan_barang_backup', 'tr_pengeluaran_barang_backup',
                           'tr_ap_inv_det_direct_fki_backup', 'tr_ap_inv_head_fki_backup',
-                          'tr_ar_inv_det_direct_fki_backup', 'tr_ar_inv_head_fki_backup', 'user_backup');
+                          'tr_ar_inv_det_direct_fki_backup', 'tr_ar_inv_head_fki_backup', 
+                          'user_backup', 'user_log_backup');
 " | $MYSQL_LOCAL 2>/dev/null || true
 
 log "Import data dari staging ke final..."
@@ -284,6 +287,7 @@ DROP TABLE IF EXISTS tr_ap_inv_head_fki_backup;
 DROP TABLE IF EXISTS tr_ar_inv_det_direct_fki_backup;
 DROP TABLE IF EXISTS tr_ar_inv_head_fki_backup;
 DROP TABLE IF EXISTS user_backup;
+DROP TABLE IF EXISTS user_log_backup;
 " 2>/dev/null || true
 
 # =============== 8) CLEANUP FILE DUMP LAMA ===============
