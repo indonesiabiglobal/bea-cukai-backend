@@ -11,6 +11,7 @@ import (
 	"Bea-Cukai/controller/productController"
 	"Bea-Cukai/controller/rawMaterialReportController"
 	"Bea-Cukai/controller/rejectScrapReportController"
+	"Bea-Cukai/controller/transactionLogController"
 	"Bea-Cukai/controller/userController"
 	"Bea-Cukai/controller/userLogController"
 	"Bea-Cukai/controller/wipPositionReportController"
@@ -25,6 +26,7 @@ import (
 	"Bea-Cukai/repo/productRepository"
 	"Bea-Cukai/repo/rawMaterialReportRepository"
 	"Bea-Cukai/repo/rejectScrapReportRepository"
+	"Bea-Cukai/repo/transactionLogRepository"
 	"Bea-Cukai/repo/userLogRepository"
 	"Bea-Cukai/repo/userRepository"
 	"Bea-Cukai/repo/wipPositionReportRepository"
@@ -38,6 +40,7 @@ import (
 	"Bea-Cukai/service/productService"
 	"Bea-Cukai/service/rawMaterialReportService"
 	"Bea-Cukai/service/rejectScrapReportService"
+	"Bea-Cukai/service/transactionLogService"
 	"Bea-Cukai/service/userLogService"
 	"Bea-Cukai/service/userService"
 	"Bea-Cukai/service/wipPositionReportService"
@@ -79,6 +82,7 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	// Repositories
 	userRepository := userRepository.NewUserRepository(db)
 	userLogRepository := userLogRepository.NewUserLogRepository(db)
+	transactionLogRepository := transactionLogRepository.NewTransactionLogRepository(db)
 	entryProductRepository := entryProductRepository.NewEntryProductRepository(db)
 	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(db)
 	pabeanRepository := pabeanRepository.NewPabeanRepository(db)
@@ -94,6 +98,7 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	// Services
 	userService := userService.NewUserService(userRepository, userLogRepository)
 	userLogService := userLogService.NewUserLogService(userLogRepository)
+	transactionLogService := transactionLogService.NewTransactionLogService(transactionLogRepository)
 	entryProductService := entryProductService.NewEntryProductService(entryProductRepository)
 	expenditureProductService := expenditureProductService.NewExpenditureProductService(expenditureProductRepository)
 	pabeanService := pabeanService.NewPabeanService(pabeanRepository)
@@ -109,6 +114,7 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	// Controllers
 	userController := userController.NewUserController(userService)
 	userLogController := userLogController.NewUserLogController(userLogService)
+	transactionLogController := transactionLogController.NewTransactionLogController(transactionLogService)
 	entryProductController := entryProductController.NewEntryProductController(entryProductService)
 	expenditureProductController := expenditureProductController.NewExpenditureProductController(expenditureProductService)
 	pabeanController := pabeanController.NewPabeanController(pabeanService)
@@ -243,6 +249,16 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 	{
 		products.GET("", productController.GetAll)
 		products.GET("/:code", productController.GetByCode)
+	}
+
+	// Transaction Logs: System transaction logs
+	transactionLogs := app.Group("/transaction-logs")
+	{
+		transactionLogs.Use(middleware.Authentication())
+		{
+			transactionLogs.GET("", transactionLogController.GetAll)
+			transactionLogs.GET("/export", transactionLogController.ExportExcel)
+		}
 	}
 
 	return app
