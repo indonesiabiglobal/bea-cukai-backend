@@ -25,8 +25,8 @@ func NewTransactionLogController(service *transactionLogService.TransactionLogSe
 // @Summary Get all transaction logs
 // @Tags TransactionLog
 // @Produce json
-// @Param start_date query string true "Start Date (YYYY-MM-DD)"
-// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Param start_date query string false "Start Date (YYYY-MM-DD)"
+// @Param end_date query string false "End Date (YYYY-MM-DD)"
 // @Param user_name query string false "Filter by username"
 // @Param page query int false "Page number" default(1)
 // @Param limit query int false "Items per page" default(10)
@@ -36,12 +36,6 @@ func (c *TransactionLogController) GetAll(ctx *gin.Context) {
 	var req model.TransactionLogRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		apiresponse.BadRequest(ctx, "INVALID_PARAMS", "Invalid request parameters", err, nil)
-		return
-	}
-
-	// Validate required fields
-	if req.StartDate == "" || req.EndDate == "" {
-		apiresponse.BadRequest(ctx, "MISSING_DATES", "Start date and end date are required", nil, nil)
 		return
 	}
 
@@ -58,8 +52,8 @@ func (c *TransactionLogController) GetAll(ctx *gin.Context) {
 // @Summary Export transaction logs to Excel
 // @Tags TransactionLog
 // @Produce application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-// @Param start_date query string true "Start Date (YYYY-MM-DD)"
-// @Param end_date query string true "End Date (YYYY-MM-DD)"
+// @Param start_date query string false "Start Date (YYYY-MM-DD)"
+// @Param end_date query string false "End Date (YYYY-MM-DD)"
 // @Param user_name query string false "Filter by username"
 // @Success 200 {file} file
 // @Router /transaction-logs/export [get]
@@ -67,12 +61,6 @@ func (c *TransactionLogController) ExportExcel(ctx *gin.Context) {
 	var req model.TransactionLogRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
 		apiresponse.BadRequest(ctx, "INVALID_PARAMS", "Invalid request parameters", err, nil)
-		return
-	}
-
-	// Validate required fields
-	if req.StartDate == "" || req.EndDate == "" {
-		apiresponse.BadRequest(ctx, "MISSING_DATES", "Start date and end date are required", nil, nil)
 		return
 	}
 

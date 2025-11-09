@@ -26,11 +26,7 @@ func (s *TransactionLogService) GetAll(req model.TransactionLogRequest) (model.T
 		req.Limit = 10
 	}
 
-	// Set default date range if not provided (last 30 days)
-	if req.StartDate == "" || req.EndDate == "" {
-		req.EndDate = "2099-12-31"
-		req.StartDate = "2000-01-01"
-	}
+	// No default date range - allow empty dates to get all data
 
 	logs, total, err := s.repo.GetAll(req)
 	if err != nil {

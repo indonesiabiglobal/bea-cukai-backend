@@ -13,9 +13,9 @@ type TransactionLog struct {
 // TableName is not needed as this is a view/query result
 
 type TransactionLogRequest struct {
-	StartDate string `json:"start_date" form:"start_date" validate:"required"` // format: 2006-01-02
-	EndDate   string `json:"end_date" form:"end_date" validate:"required"`     // format: 2006-01-02
-	UserName  string `json:"user_name" form:"user_name"`                       // optional filter
+	StartDate string `json:"start_date" form:"start_date"` // format: 2006-01-02, optional
+	EndDate   string `json:"end_date" form:"end_date"`     // format: 2006-01-02, optional
+	UserName  string `json:"user_name" form:"user_name"`   // optional filter
 	Page      int    `json:"page" form:"page"`
 	Limit     int    `json:"limit" form:"limit"`
 }
