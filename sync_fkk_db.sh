@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+LOCKFILE="/tmp/sync_fkk_db.lock"
+
+if [ -f "$LOCKFILE" ]; then
+  echo "[WARN] Sync sedang berjalan. Batalkan."
+  exit 2
+fi
+
+trap "rm -f $LOCKFILE" EXIT
+touch $LOCKFILE
+
 # =============== KONFIG (EDIT JIKA PERLU) ===============
 SRC_HOST="192.168.1.100"
 SRC_PORT="3306"
