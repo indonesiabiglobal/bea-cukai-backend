@@ -26,11 +26,16 @@ STG_DB="fkk_temp"
 FINAL_DB="fukusuke_fkk"
 
 WORKDIR="/tmp"
+LOG_DIR="/var/log/bea-cukai"
 DATESTR="$(date +%Y%m%d_%H%M%S)"
 DUMP_SRC="${WORKDIR}/${SRC_DB}_${DATESTR}.sql"
 DUMP_STG="${WORKDIR}/${STG_DB}_${DATESTR}.sql"
-LOG_FILE="${WORKDIR}/sync_fkk_${DATESTR}.log"
-LOG_LATEST="${WORKDIR}/sync_fkk_latest.log"
+LOG_FILE="${LOG_DIR}/sync_fkk_${DATESTR}.log"
+LOG_LATEST="${LOG_DIR}/sync_fkk_latest.log"
+
+# Create log directory if not exists
+mkdir -p "${LOG_DIR}"
+chmod 755 "${LOG_DIR}" 2>/dev/null || true
 
 MYSQL_LOCAL="mysql -h ${DEST_HOST} -P ${DEST_PORT} -u ${DEST_USER} --password=${DEST_PASS}"
 MYSQL_SRC="mysql -h ${SRC_HOST} -P ${SRC_PORT} -u ${SRC_USER} --password=${SRC_PASS}"
@@ -334,8 +339,8 @@ find "${WORKDIR}" -name "${STG_DB}_*.sql" -type f ! -name "$(basename ${DUMP_STG
 find "${WORKDIR}" -name "alter_zero_*.sql" -type f -mtime +0 -delete 2>/dev/null || true
 find "${WORKDIR}" -name "upd_all_*.sql" -type f -mtime +0 -delete 2>/dev/null || true
 
-# Hapus log file lama (keep 10 terbaru)
-find "${WORKDIR}" -name "sync_fkk_*.log" -type f ! -name "sync_fkk_latest.log" -mtime +0 | sort -r | tail -n +11 | xargs rm -f 2>/dev/null || true
+# Hapus log file lama (keep 10 terbaru) dari LOG_DIR bukan WORKDIR
+find "${LOG_DIR}" -name "sync_fkk_*.log" -type f ! -name "sync_fkk_latest.log" -mtime +0 2>/dev/null | sort -r | tail -n +11 | xargs rm -f 2>/dev/null || true
 
 log "SELESAI. Log: ${LOG_FILE}"
 
