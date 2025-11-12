@@ -37,10 +37,30 @@ MYSQL_SRC="mysql -h ${SRC_HOST} -P ${SRC_PORT} -u ${SRC_USER} --password=${SRC_P
 MYSQLDUMP_SRC="mysqldump -h ${SRC_HOST} -P ${SRC_PORT} -u ${SRC_USER} --password=${SRC_PASS}"
 MYSQLDUMP_LOCAL="mysqldump -h ${DEST_HOST} -P ${DEST_PORT} -u ${DEST_USER} --password=${DEST_PASS}"
 
+# Create log file and symlink immediately
+touch "$LOG_FILE"
+chmod 666 "$LOG_FILE" 2>/dev/null || true
+ln -sf "$LOG_FILE" "$LOG_LATEST"
+chmod 666 "$LOG_LATEST" 2>/dev/null || true
+
 log(){ echo "[$(date '+%F %T')] $*" | tee -a "$LOG_FILE" ; }
 
-# Create symlink to latest log
-ln -sf "$LOG_FILE" "$LOG_LATEST"
+# Log start message with environment info
+log "===== MULAI SINKRONISASI DATABASE ====="
+log "Log file: ${LOG_FILE}"
+log "Symlink: ${LOG_LATEST}"
+log "User: $(whoami)"
+log "UID: $(id -u)"
+log "PWD: $(pwd)"
+log "WORKDIR: ${WORKDIR}"
+
+# Verify log file is writable
+if [ -w "$LOG_FILE" ]; then
+  log "✓ Log file writable"
+else
+  echo "[ERROR] Log file not writable: $LOG_FILE" >&2
+  ls -l "$LOG_FILE" >&2
+fi
 
 # =============== CEK KONEKSI ===============
 log "Cek koneksi SOURCE ${SRC_HOST}..."
@@ -314,4 +334,11 @@ find "${WORKDIR}" -name "${STG_DB}_*.sql" -type f ! -name "$(basename ${DUMP_STG
 find "${WORKDIR}" -name "alter_zero_*.sql" -type f -mtime +0 -delete 2>/dev/null || true
 find "${WORKDIR}" -name "upd_all_*.sql" -type f -mtime +0 -delete 2>/dev/null || true
 
+# Hapus log file lama (keep 10 terbaru)
+find "${WORKDIR}" -name "sync_fkk_*.log" -type f ! -name "sync_fkk_latest.log" -mtime +0 | sort -r | tail -n +11 | xargs rm -f 2>/dev/null || true
+
 log "SELESAI. Log: ${LOG_FILE}"
+
+# Ensure log file is flushed and symlink is updated
+sync
+ln -sf "$LOG_FILE" "$LOG_LATEST" 2>/dev/null || true
