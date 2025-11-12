@@ -30,6 +30,7 @@ DATESTR="$(date +%Y%m%d_%H%M%S)"
 DUMP_SRC="${WORKDIR}/${SRC_DB}_${DATESTR}.sql"
 DUMP_STG="${WORKDIR}/${STG_DB}_${DATESTR}.sql"
 LOG_FILE="${WORKDIR}/sync_fkk_${DATESTR}.log"
+LOG_LATEST="${WORKDIR}/sync_fkk_latest.log"
 
 MYSQL_LOCAL="mysql -h ${DEST_HOST} -P ${DEST_PORT} -u ${DEST_USER} --password=${DEST_PASS}"
 MYSQL_SRC="mysql -h ${SRC_HOST} -P ${SRC_PORT} -u ${SRC_USER} --password=${SRC_PASS}"
@@ -37,6 +38,9 @@ MYSQLDUMP_SRC="mysqldump -h ${SRC_HOST} -P ${SRC_PORT} -u ${SRC_USER} --password
 MYSQLDUMP_LOCAL="mysqldump -h ${DEST_HOST} -P ${DEST_PORT} -u ${DEST_USER} --password=${DEST_PASS}"
 
 log(){ echo "[$(date '+%F %T')] $*" | tee -a "$LOG_FILE" ; }
+
+# Create symlink to latest log
+ln -sf "$LOG_FILE" "$LOG_LATEST"
 
 # =============== CEK KONEKSI ===============
 log "Cek koneksi SOURCE ${SRC_HOST}..."

@@ -90,42 +90,60 @@ func (sc *SyncController) GetSyncStatus(c *gin.Context) {
 // GetSyncLog retrieves the latest sync log
 // GET /api/sync/log
 func (sc *SyncController) GetSyncLog(c *gin.Context) {
-	// Try multiple log locations (production and test)
-	logPaths := []string{
-		"./sync_test.log",          // Local test log
-		"/var/log/sync_fkk_db.log", // Production log
-		"/tmp/sync_fkk_db.log",     // Alternative production log
-	}
-
 	var logFile string
 	var logContent []byte
 	var err error
 
-	// Try to find and read the first available log file
-	for _, path := range logPaths {
-		cmd := exec.Command("bash", "-c", "test -f "+path)
-		if cmd.Run() == nil {
-			// File exists, try to read it
-			cmd = exec.Command("bash", "-c", "tail -n 100 "+path)
-			logContent, err = cmd.Output()
-			if err == nil {
-				logFile = path
-				break
-			}
+	// 1. Try symlink first (fastest) - /tmp/sync_fkk_latest.log
+	cmd := exec.Command("bash", "-c", "test -f /tmp/sync_fkk_latest.log")
+	if cmd.Run() == nil {
+		cmd = exec.Command("bash", "-c", "tail -n 100 /tmp/sync_fkk_latest.log")
+		logContent, err = cmd.Output()
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "success",
+				"logFile": "/tmp/sync_fkk_latest.log",
+				"content": string(logContent),
+			})
+			return
 		}
 	}
 
-	if logFile == "" {
-		c.JSON(http.StatusNotFound, gin.H{
-			"status":  "error",
-			"message": "Log file tidak ditemukan.",
-		})
-		return
+	// 2. Find the latest production log file with timestamp
+	cmd = exec.Command("bash", "-c", "ls -t /tmp/sync_fkk_*.log 2>/dev/null | grep -v latest | head -1")
+	output, err := cmd.Output()
+	if err == nil && len(output) > 0 {
+		// Found production log, use it
+		logFile = string(output[:len(output)-1]) // Remove trailing newline
+		cmd = exec.Command("bash", "-c", "tail -n 100 "+logFile)
+		logContent, err = cmd.Output()
+		if err == nil && logFile != "" {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "success",
+				"logFile": logFile,
+				"content": string(logContent),
+			})
+			return
+		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":  "success",
-		"logFile": logFile,
-		"content": string(logContent),
+	// 3. Fallback: try test log
+	cmd = exec.Command("bash", "-c", "test -f ./sync_test.log")
+	if cmd.Run() == nil {
+		cmd = exec.Command("bash", "-c", "tail -n 100 ./sync_test.log")
+		logContent, err = cmd.Output()
+		if err == nil {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "success",
+				"logFile": "./sync_test.log",
+				"content": string(logContent),
+			})
+			return
+		}
+	}
+
+	c.JSON(http.StatusNotFound, gin.H{
+		"status":  "error",
+		"message": "Log file tidak ditemukan.",
 	})
 }
