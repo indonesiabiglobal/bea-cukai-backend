@@ -76,8 +76,6 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 		args = append(args, "%"+filter.ItemName+"%")
 	}
 
-	// Complex query equivalent to the PHP version for auxiliary materials
-	// Note: This uses different data sources than other reports
 	baseQuery := fmt.Sprintf(`
 		SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code, 
 			IFNULL(b.awal, 0) as awal,
@@ -204,7 +202,7 @@ func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filte
 			Peny:         formatNumber(raw.Peny, 2),
 			Akhir:        strconv.FormatFloat(raw.Akhir, 'f', -1, 64),
 			Opname:       formatNumber(raw.Opname, 2),
-			Selisih:      "0", // Always 0 as in PHP
+			Selisih:      "0",
 		}
 		results = append(results, result)
 	}

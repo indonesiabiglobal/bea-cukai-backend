@@ -57,7 +57,9 @@ func (r *WipPositionReportRepository) getMaxOpnameDate(ctx context.Context, befo
 	}
 
 	return parsedDate, nil
-} // GetReport retrieves WIP position report with complex inventory calculations
+} 
+
+// GetReport retrieves WIP position report with complex inventory calculations
 func (r *WipPositionReportRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.WipPositionReportResponse, int64, error) {
 	// Get inventory opname dates similar to PHP logic
 	tglInvAwal, err := r.getMaxOpnameDate(ctx, filter.TglAwal.AddDate(0, 0, -1))
