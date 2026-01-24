@@ -64,7 +64,11 @@ func (sc *SyncController) RunSync(c *gin.Context) {
 // GET /api/sync/status
 func (sc *SyncController) GetSyncStatus(c *gin.Context) {
 	// Check if lock file exists (both production and test paths)
-	lockFiles := []string{"/tmp/sync_fkk_db.lock", "/tmp/sync_fkk_db_test.lock"}
+	lockFiles := []string{
+		"/tmp/sync_fkk_db.lock", 
+		"/tmp/sync_fkk_db_test.lock",
+		"/opt/bea-cukai-app/tmp/sync_fkk_db.lock",
+	}
 
 	for _, lockFile := range lockFiles {
 		cmd := exec.Command("bash", "-c", "test -f "+lockFile)

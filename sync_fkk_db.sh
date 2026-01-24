@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOCKFILE="/tmp/sync_fkk_db.lock"
+# LOCKFILE="/tmp/sync_fkk_db.lock"
+LOCKFILE="/opt/bea-cukai-app/tmp/sync_fkk_db.lock"
 
 if [ -f "$LOCKFILE" ]; then
   echo "[WARN] Sync sedang berjalan. Batalkan."
