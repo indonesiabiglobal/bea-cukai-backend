@@ -278,6 +278,7 @@ $MYSQL_LOCAL -e "CREATE DATABASE IF NOT EXISTS \`${FINAL_DB}\`;"
 
 log "Backup tabel yang akan dipertahankan..."
 $MYSQL_LOCAL --database="${FINAL_DB}" -e "
+CREATE TABLE IF NOT EXISTS ms_pabean_backup LIKE ms_pabean;
 CREATE TABLE IF NOT EXISTS tr_pemasukan_barang_backup LIKE tr_pemasukan_barang;
 CREATE TABLE IF NOT EXISTS tr_pengeluaran_barang_backup LIKE tr_pengeluaran_barang;
 CREATE TABLE IF NOT EXISTS tr_ap_inv_det_direct_fki_backup LIKE tr_ap_inv_det_direct_fki;
@@ -286,6 +287,7 @@ CREATE TABLE IF NOT EXISTS tr_ar_inv_det_direct_fki_backup LIKE tr_ar_inv_det_di
 CREATE TABLE IF NOT EXISTS tr_ar_inv_head_fki_backup LIKE tr_ar_inv_head_fki;
 CREATE TABLE IF NOT EXISTS user_backup LIKE user;
 CREATE TABLE IF NOT EXISTS user_log_backup LIKE user_log;
+INSERT INTO ms_pabean_backup SELECT * FROM ms_pabean;
 INSERT INTO tr_pemasukan_barang_backup SELECT * FROM tr_pemasukan_barang;
 INSERT INTO tr_pengeluaran_barang_backup SELECT * FROM tr_pengeluaran_barang;
 INSERT INTO tr_ap_inv_det_direct_fki_backup SELECT * FROM tr_ap_inv_det_direct_fki;
@@ -308,7 +310,7 @@ WHERE TABLE_SCHEMA = '${FINAL_DB}'
                           'tr_pemasukan_barang_backup', 'tr_pengeluaran_barang_backup',
                           'tr_ap_inv_det_direct_fki_backup', 'tr_ap_inv_head_fki_backup',
                           'tr_ar_inv_det_direct_fki_backup', 'tr_ar_inv_head_fki_backup', 
-                          'user_backup', 'user_log_backup');
+                          'user_backup', 'user_log_backup', 'ms_pabean_backup', 'ms_pabean');
 " | $MYSQL_LOCAL 2>/dev/null || true
 
 log "Import data dari staging ke final..."
@@ -326,6 +328,7 @@ DROP TABLE IF EXISTS tr_ap_inv_det_direct_fki_backup;
 DROP TABLE IF EXISTS tr_ap_inv_head_fki_backup;
 DROP TABLE IF EXISTS tr_ar_inv_det_direct_fki_backup;
 DROP TABLE IF EXISTS tr_ar_inv_head_fki_backup;
+DROP TABLE IF EXISTS ms_pabean_backup;
 DROP TABLE IF EXISTS user_backup;
 DROP TABLE IF EXISTS user_log_backup;
 " 2>/dev/null || true

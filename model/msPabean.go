@@ -5,8 +5,9 @@ import (
 )
 
 type MsPabean struct {
-	PabeanCode  string    `json:"pabean_code" gorm:"column:dept_code;type:varchar(255);not null"`
-	PabeanName  string    `json:"pabean_name" gorm:"column:dept_name;type:varchar(255);not null"`
+	Id		 int       `json:"id" gorm:"column:id;type:int;primaryKey;autoIncrement"`
+	PabeanCode  string    `json:"pabean_code" gorm:"column:pabean_code;type:varchar(255);not null"`
+	PabeanName  string    `json:"pabean_name" gorm:"column:pabean_name;type:varchar(255);not null"`
 	Notes       string    `json:"notes" gorm:"type:text"`
 	CreatedBy   string    `json:"created_by" gorm:"type:varchar(255)"`
 	CreatedDate time.Time `json:"created_date" gorm:"type:datetime"`
@@ -15,7 +16,7 @@ type MsPabean struct {
 }
 
 // TableName overrides the default table name.
-func (MsPabean) TableName() string { return "ms_pabean_doc" }
+func (MsPabean) TableName() string { return "ms_pabean" }
 
 type MsPabeanRequest struct {
 	PabeanCode string `json:"pabean_code" validate:"required"`
