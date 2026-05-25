@@ -51,6 +51,8 @@ func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter Get
 	if filter.ProductName != "" {
 		query = query.Where("item_name LIKE ?", "%"+filter.ProductName+"%")
 	}
+
+	query = query.Where("item_code != ?", 1)
 	// Note: ProductGroup filter might need adjustment based on your data structure
 	// since the current model doesn't have a product_group field directly
 
