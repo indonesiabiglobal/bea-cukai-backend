@@ -3,6 +3,7 @@ package expenditureProductRepository
 import (
 	"Bea-Cukai/model"
 	"context"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -32,6 +33,14 @@ type GetReportFilter struct {
 	IsExport     bool
 }
 
+func normalizeItemCode(itemCode string) string {
+	if itemCode == "1" {
+		return itemCode
+	}
+
+	return strings.TrimPrefix(itemCode, "1")
+}
+
 // GetReport retrieves expenditure products with filters and pagination
 func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
 	from, to := filter.From, filter.To
@@ -46,13 +55,16 @@ func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter Get
 		query = query.Where("no_pabean = ?", filter.NoPabean)
 	}
 	if filter.ProductCode != "" {
-		query = query.Where("item_code = ?", filter.ProductCode)
+		if filter.ProductCode == "1" {
+			query = query.Where("item_code = ?", filter.ProductCode)
+		} else {
+			query = query.Where("(item_code = ? OR (item_code LIKE '1%' AND SUBSTR(item_code, 2) = ?))", filter.ProductCode, filter.ProductCode)
+		}
 	}
 	if filter.ProductName != "" {
 		query = query.Where("item_name LIKE ?", "%"+filter.ProductName+"%")
 	}
 
-	query = query.Where("item_code != ?", 1)
 	// Note: ProductGroup filter might need adjustment based on your data structure
 	// since the current model doesn't have a product_group field directly
 
@@ -77,5 +89,8 @@ func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter Get
 		query = query.Order("tgl_pabean DESC")
 	}
 	err = query.Find(&results).Error
+	for i := range results {
+		results[i].ItemCode = normalizeItemCode(results[i].ItemCode)
+	}
 	return results, totalCount, err
 }
