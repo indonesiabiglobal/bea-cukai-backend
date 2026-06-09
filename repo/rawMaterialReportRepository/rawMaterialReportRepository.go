@@ -60,8 +60,10 @@ func (r *RawMaterialReportRepository) getMaxMaterialHarianDate(ctx context.Conte
 
 // GetReport retrieves raw material report with complex inventory calculations
 func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.RawMaterialReportResponse, int64, error) {
-	// Get material harian dates similar to PHP logic
-	tglInvAwal := filter.From.AddDate(0, 0, -1) // DATE_SUB(tgl_awal, INTERVAL 1 DAY)
+	tglInvAwal, err := r.getMaxMaterialHarianDate(ctx, filter.From)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	tglInvAkhir, err := r.getMaxMaterialHarianDate(ctx, filter.To)
 	if err != nil {
@@ -120,13 +122,28 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			WHERE a.trans_date BETWEEN ? AND ? 
 			GROUP BY item_code
 		),
+		out_after_opname AS (
+			SELECT apdet.item_code, SUM(rmdet.qty) as trf_out 
+			FROM tr_inv_rm_head rmhead
+			INNER JOIN tr_inv_rm_det rmdet ON rmhead.trans_no = rmdet.trans_no
+			INNER JOIN tr_ap_inv_det apdet ON rmdet.data_no = apdet.data_no
+			WHERE rmhead.trans_date BETWEEN ? AND ? 
+			GROUP BY apdet.item_code
+		),
+		in_after_opname AS (
+			SELECT apdet.item_code, SUM(apdet.qty) as trf_in 
+			FROM tr_ap_inv_head aphead
+			INNER JOIN tr_ap_inv_det apdet ON aphead.trans_no = apdet.trans_no
+			WHERE aphead.in_date BETWEEN ? AND ? 
+			GROUP BY apdet.item_code
+		),
 		z AS (
 			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-				IFNULL(b.awal, 0) as awal,
+				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) as awal,
 				IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) as masuk,
-				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)) - IFNULL(f.opname, 0) as keluar,
+				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0) - IFNULL(f.opname, 0) as keluar,
 				IFNULL(e.peny, 0) as peny,
-				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)) as akhir,
+				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0) as akhir,
 				IFNULL(f.opname, 0) as opname,
 				0 as selisih
 			FROM ms_item a 
@@ -135,6 +152,8 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			LEFT JOIN e ON a.item_code = e.item_code 
 			LEFT JOIN f ON a.item_code = f.item_code 
 			LEFT JOIN g ON a.item_code = g.item_code 
+			LEFT JOIN out_after_opname ON a.item_code = out_after_opname.item_code
+			LEFT JOIN in_after_opname ON a.item_code = in_after_opname.item_code
 			WHERE a.item_group = 'MATERIAL' %s
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
@@ -150,7 +169,12 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		tglInvAkhir.Format("2006-01-02"),
 		filter.From.Format("2006-01-02"),
 		filter.To.Format("2006-01-02"),
+		tglInvAwal.AddDate(0,0,1).Format("2006-01-02"), // trf_out start date
+		filter.From.AddDate(0,0,-1).Format("2006-01-02"), // trf_out end date
+		tglInvAwal.AddDate(0,0,1).Format("2006-01-02"), // trf_in start date
+		filter.From.AddDate(0,0,-1).Format("2006-01-02"),   // trf_in end date
 	}
+
 	fmt.Println("Query Args:", queryArgs)
 	queryArgs = append(queryArgs, args...)
 
