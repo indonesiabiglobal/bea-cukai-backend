@@ -84,10 +84,19 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		args = append(args, "%"+filter.ItemName+"%")
 	}
 
+	queryAwal := "(IFNULL(b.awal, 0) + (IFNULL(in_after_opname.trf_in, 0) + IFNULL(movein_after_opname.movein_after, 0)) - IFNULL(out_after_opname.trf_out, 0) + IFNULL(peny_after_opname.peny, 0))"
+	// Tentukan ekspresi opname: jika tglInvAkhir == filter.To, gunakan nilai akhir (computed); jika tidak, gunakan data opname dari tabel
+	akhirExpr := "(IFNULL(b.awal, 0) + (IFNULL(in_after_opname.trf_in, 0) + IFNULL(movein_after_opname.movein_after, 0)) - IFNULL(out_after_opname.trf_out, 0) + IFNULL(peny_after_opname.peny, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)"
+	opnameExpr := "IFNULL(f.opname, 0)"
+	if tglInvAkhir.Format("2006-01-02") != filter.To.Format("2006-01-02") {
+		opnameExpr = akhirExpr
+	}
+
 	// Complex CTE query equivalent to the PHP version
 	baseQuery := fmt.Sprintf(`
 		WITH b AS (
-			SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin) as awal 
+			-- SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin) as awal 
+			SELECT b.item_code, SUM(b.wh2) as awal 
 			FROM tr_inv_material_harian_head a 
 			INNER JOIN tr_inv_material_harian_det b ON a.trans_no = b.trans_no 
 			WHERE a.trans_date = ?
@@ -109,7 +118,8 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			GROUP BY b.item_code
 		), 
 		f AS (
-			SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin) as opname 
+			-- SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin) as opname 
+			SELECT b.item_code, SUM(b.wh2) as opname 
 			FROM tr_inv_material_harian_head a 
 			INNER JOIN tr_inv_material_harian_det b ON a.trans_no = b.trans_no 
 			WHERE a.trans_date = ? 
@@ -117,9 +127,10 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		), 
 		g AS (
 			SELECT item_code, SUM(qty) as movein 
-			FROM tr_inv_movein_head a 
-			INNER JOIN tr_inv_movein_det b ON a.trans_no = b.trans_no 
-			WHERE a.trans_date BETWEEN ? AND ? 
+			FROM tr_inv_movein_head moveinhead
+			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no 
+			WHERE moveinhead.trans_date BETWEEN ? AND ? 
+			AND moveindet.location_code = 'WH-MAT-2'
 			GROUP BY item_code
 		),
 		out_after_opname AS (
@@ -137,27 +148,47 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			WHERE aphead.in_date BETWEEN ? AND ? 
 			GROUP BY apdet.item_code
 		),
+		movein_after_opname AS (
+			SELECT item_code, SUM(qty) as movein_after 
+			FROM tr_inv_movein_head moveinhead
+			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no 
+			WHERE moveinhead.trans_date BETWEEN ? AND ? 
+			AND moveindet.location_code = 'WH-MAT-2'
+			GROUP BY item_code
+		),
+		peny_after_opname AS (
+			SELECT b.item_code, SUM(b.qty) as peny 
+			FROM tr_inv_adjust_head a 
+			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no 
+			LEFT JOIN ms_item c ON b.item_code = c.item_code 
+			WHERE a.trans_date BETWEEN ? AND ? AND c.item_group = 'MATERIAL' 
+			GROUP BY b.item_code
+		),
 		z AS (
 			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) as awal,
+				%s as awal,
 				IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) as masuk,
-				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0) - IFNULL(f.opname, 0) as keluar,
+				%s - %s as keluar,
 				IFNULL(e.peny, 0) as peny,
-				(IFNULL(b.awal, 0) + IFNULL(in_after_opname.trf_in, 0) - IFNULL(out_after_opname.trf_out, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0) as akhir,
-				IFNULL(f.opname, 0) as opname,
+				%s as akhir,
+				%s as opname,
 				0 as selisih
-			FROM ms_item a 
-			LEFT JOIN b ON a.item_code = b.item_code 
-			LEFT JOIN c ON a.item_code = c.item_code 
-			LEFT JOIN e ON a.item_code = e.item_code 
-			LEFT JOIN f ON a.item_code = f.item_code 
-			LEFT JOIN g ON a.item_code = g.item_code 
+			FROM ms_item a
+			LEFT JOIN b ON a.item_code = b.item_code
+			LEFT JOIN c ON a.item_code = c.item_code
+			LEFT JOIN e ON a.item_code = e.item_code
+			LEFT JOIN f ON a.item_code = f.item_code
+			LEFT JOIN g ON a.item_code = g.item_code
 			LEFT JOIN out_after_opname ON a.item_code = out_after_opname.item_code
 			LEFT JOIN in_after_opname ON a.item_code = in_after_opname.item_code
+			LEFT JOIN movein_after_opname ON a.item_code = movein_after_opname.item_code
+			LEFT JOIN peny_after_opname ON a.item_code = peny_after_opname.item_code
 			WHERE a.item_group = 'MATERIAL' %s
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
-	`, whereConditions)
+	`, queryAwal, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
+	fmt.Println("akhirExpr:", akhirExpr)
+	fmt.Println("opnameExpr:", opnameExpr)
 
 	// Prepare arguments for the complex query
 	queryArgs := []interface{}{
@@ -166,16 +197,19 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		filter.To.Format("2006-01-02"),
 		filter.From.Format("2006-01-02"),
 		filter.To.Format("2006-01-02"),
-		tglInvAkhir.Format("2006-01-02"),
+		tglInvAkhir.Format("2006-01-02"), // opname date
 		filter.From.Format("2006-01-02"),
 		filter.To.Format("2006-01-02"),
-		tglInvAwal.AddDate(0,0,1).Format("2006-01-02"), // trf_out start date
-		filter.From.AddDate(0,0,-1).Format("2006-01-02"), // trf_out end date
-		tglInvAwal.AddDate(0,0,1).Format("2006-01-02"), // trf_in start date
-		filter.From.AddDate(0,0,-1).Format("2006-01-02"),   // trf_in end date
+		tglInvAwal.AddDate(0, 0, 1).Format("2006-01-02"),   // trf_out start date
+		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // trf_out end date
+		tglInvAwal.AddDate(0, 0, 1).Format("2006-01-02"),   // trf_in start date
+		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // trf_in end date
+		tglInvAwal.AddDate(0, 0, 1).Format("2006-01-02"),   // movein_after start date
+		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // movein_after end date
+		tglInvAwal.AddDate(0, 0, 1).Format("2006-01-02"),   // peny_after_opname start date
+		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // peny_after_opname end date
 	}
 
-	fmt.Println("Query Args:", queryArgs)
 	queryArgs = append(queryArgs, args...)
 
 	// Get total count first
