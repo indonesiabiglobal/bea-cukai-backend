@@ -19,7 +19,8 @@ func NewFinishedProductReportRepository(db *gorm.DB) *FinishedProductReportRepos
 	return &FinishedProductReportRepository{db: db}
 }
 
-// ---- DTOs for filters ----
+// ---- DTOs ----
+
 type GetReportFilter struct {
 	From     time.Time
 	To       time.Time
@@ -29,7 +30,23 @@ type GetReportFilter struct {
 	Limit    int
 }
 
-// Helper function to get max product harian date
+// productOpnameDates menyimpan tanggal opname per tipe head yang dibutuhkan laporan.
+//
+// Struktur data di tr_inv_produk_harian_head:
+//   - opname_gudang2 = 1  → det berisi wh2 saja  (wh1/mesin/qc = 0)
+//   - opname_gudang2 = 0  → det berisi wh1+mesin+qc (wh2 = 0)
+//
+// Kedua tipe bisa memiliki trans_date berbeda sehingga masing-masing butuh
+// tanggal referensinya sendiri agar tidak ada data yang terlewat.
+type productOpnameDates struct {
+	TglAwalGudang2  time.Time // MAX(trans_date WHERE opname_gudang2=1 AND <= From) — CTE b(gudang2=1), c, d, e
+	TglAwalGudang0  time.Time // MAX(trans_date WHERE opname_gudang2=0 AND <= From) — CTE b(gudang2=0)
+	TglAkhirGudang2 time.Time // MAX(trans_date WHERE opname_gudang2=1 AND <= To)   — CTE f(gudang2=1)
+	TglAkhirGudang0 time.Time // MAX(trans_date WHERE opname_gudang2=0 AND <= To)   — CTE f(gudang2=0)
+}
+
+// getMaxProductHarianDate returns the most recent trans_date <= beforeDate.
+// Dipertahankan untuk backward compatibility / testing.
 func (r *FinishedProductReportRepository) getMaxProductHarianDate(ctx context.Context, beforeDate time.Time) (time.Time, error) {
 	var result struct {
 		TransDate string `gorm:"column:trans_date"`
@@ -41,143 +58,265 @@ func (r *FinishedProductReportRepository) getMaxProductHarianDate(ctx context.Co
 		Where("trans_date <= ?", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
+	defaultDate, _ := time.Parse("2006-01-02", "2000-01-01")
 	if err != nil {
-		// Return default date if error
-		defaultDate, _ := time.Parse("2006-01-02", "2000-01-01")
 		return defaultDate, err
 	}
 
-	// Parse the string date to time.Time
 	parsedDate, err := time.Parse("2006-01-02", result.TransDate)
 	if err != nil {
-		// Return default date if parsing fails
-		defaultDate, _ := time.Parse("2006-01-02", "2000-01-01")
 		return defaultDate, err
 	}
-
 	return parsedDate, nil
 }
 
-// GetReport retrieves finished product report with complex inventory calculations
-func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.FinishedProductReportResponse, int64, error) {
-	// Get product harian dates similar to PHP logic
-	tglInvAwal := filter.From.AddDate(0, 0, -1) // DATE_SUB(tgl_awal, INTERVAL 1 DAY)
-
-	tglInvAkhir, err := r.getMaxProductHarianDate(ctx, filter.To)
-	if err != nil {
-		return nil, 0, err
+// getAllProductOpnameDates mengambil 4 tanggal opname dalam satu DB round trip.
+// Masing-masing tanggal difilter per opname_gudang2 karena kedua tipe head
+// bisa memiliki trans_date yang berbeda.
+func (r *FinishedProductReportRepository) getAllProductOpnameDates(ctx context.Context, fromDate, toDate time.Time) (productOpnameDates, error) {
+	var result struct {
+		TglAwalGudang2  string `gorm:"column:tgl_awal_gudang2"`
+		TglAwalGudang0  string `gorm:"column:tgl_awal_gudang0"`
+		TglAkhirGudang2 string `gorm:"column:tgl_akhir_gudang2"`
+		TglAkhirGudang0 string `gorm:"column:tgl_akhir_gudang0"`
 	}
 
-	// Build WHERE conditions for filters
+	err := r.db.WithContext(ctx).Raw(`
+		SELECT
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang2,
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 0 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang0,
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang2,
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 0 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang0
+		FROM tr_inv_produk_harian_head
+		WHERE trans_date <= ?
+	`, fromDate.Format("2006-01-02"), fromDate.Format("2006-01-02"),
+		toDate.Format("2006-01-02"), toDate.Format("2006-01-02"),
+		toDate.Format("2006-01-02")).Scan(&result).Error
+
+	defaultDate, _ := time.Parse("2006-01-02", "2000-01-01")
+	dates := productOpnameDates{
+		TglAwalGudang2:  defaultDate,
+		TglAwalGudang0:  defaultDate,
+		TglAkhirGudang2: defaultDate,
+		TglAkhirGudang0: defaultDate,
+	}
+
+	if err != nil {
+		return dates, err
+	}
+
+	if t, e := time.Parse("2006-01-02", result.TglAwalGudang2); e == nil {
+		dates.TglAwalGudang2 = t
+	}
+	if t, e := time.Parse("2006-01-02", result.TglAwalGudang0); e == nil {
+		dates.TglAwalGudang0 = t
+	}
+	if t, e := time.Parse("2006-01-02", result.TglAkhirGudang2); e == nil {
+		dates.TglAkhirGudang2 = t
+	}
+	if t, e := time.Parse("2006-01-02", result.TglAkhirGudang0); e == nil {
+		dates.TglAkhirGudang0 = t
+	}
+
+	return dates, nil
+}
+
+// buildBaseQuery membangun CTE query dan slice args yang terurut.
+// Pure function — tidak ada DB call, aman untuk unit test.
+//
+// Formula awal:
+//
+//	awal = b.stok_opname
+//	     + masuk_awal  (tgl_proses > TglAwalGudang2 AND <= filter.From)
+//	     - keluar_awal (tgl_ekspor > TglAwalGudang2 AND <= filter.From)
+//	     + peny_awal   (trans_date > TglAwalGudang2 AND <= filter.From)
+//
+// CTE c/d/e menangani periode laporan (filter.From → filter.To) untuk kolom masuk/keluar/peny.
+func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, []any) {
 	whereConditions := ""
-	args := []interface{}{}
+	extraArgs := []any{}
 
 	if filter.ItemCode != "" {
 		whereConditions += " AND a.item_code LIKE ?"
-		args = append(args, "%"+filter.ItemCode+"%")
+		extraArgs = append(extraArgs, "%"+filter.ItemCode+"%")
 	}
-
 	if filter.ItemName != "" {
 		whereConditions += " AND a.item_name LIKE ?"
-		args = append(args, "%"+filter.ItemName+"%")
+		extraArgs = append(extraArgs, "%"+filter.ItemName+"%")
 	}
 
-	// Complex CTE query equivalent to the PHP version
-	// Note: Different CTEs for finished products vs raw materials
-	baseQuery := fmt.Sprintf(`
+	awalExpr := "(IFNULL(b.awal, 0) + IFNULL(masuk_awal.masuk, 0) - IFNULL(keluar_awal.keluar, 0) + IFNULL(peny_awal.peny, 0))"
+
+	akhirExpr := fmt.Sprintf("%s + IFNULL(c.masuk, 0) - IFNULL(d.keluar, 0) + IFNULL(e.peny, 0)", awalExpr)
+
+	opnameExpr := "IFNULL(f.opname, 0)"
+	if dates.TglAkhirGudang2.Format("2006-01-02") != filter.To.Format("2006-01-02") {
+		opnameExpr = akhirExpr
+	}
+
+	query := fmt.Sprintf(`
 		WITH b AS (
-			SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin + b.qc) as awal 
-			FROM tr_inv_produk_harian_head a 
-			INNER JOIN tr_inv_produk_harian_det b ON a.trans_no = b.trans_no 
-			WHERE a.trans_date = ?
-			GROUP BY b.item_code
-		), 
-		c AS (
-			SELECT no_produk, SUM(isi_palet) as masuk 
-			FROM tr_produk_in_head 
-			WHERE tgl_proses BETWEEN ? AND ? 
+			SELECT det.item_code,
+				SUM(
+					CASE WHEN head.opname_gudang2 = 1 THEN det.wh2 ELSE 0 END
+				) AS awal
+			FROM tr_inv_produk_harian_head head
+			INNER JOIN tr_inv_produk_harian_det det ON head.trans_no = det.trans_no
+			WHERE (head.opname_gudang2 = 1 AND head.trans_date = ?)
+			GROUP BY det.item_code
+		),
+		masuk_awal AS (
+			SELECT no_produk, SUM(isi_palet) AS masuk
+			FROM tr_produk_in_head
+			WHERE tgl_proses > ? AND tgl_proses <= ?
 			GROUP BY no_produk
-		), 
-		d AS (
-			SELECT b.no_produk, SUM(isi_palet) as keluar 
-			FROM tr_export_head a 
-			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no 
-			WHERE a.tgl_ekspor BETWEEN ? AND ? 
+		),
+		keluar_awal AS (
+			SELECT b.no_produk, SUM(isi_palet) AS keluar
+			FROM tr_export_head a
+			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
+			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor <= ?
 			GROUP BY b.no_produk
-		), 
+		),
+		peny_awal AS (
+			SELECT b.item_code, SUM(qty) AS peny
+			FROM tr_inv_adjust_head a
+			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
+			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			WHERE a.trans_date > ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
+			GROUP BY b.item_code
+		),
+		c AS (
+			SELECT no_produk, SUM(isi_palet) AS masuk
+			FROM tr_produk_in_head
+			WHERE tgl_proses > ? AND tgl_proses <= ?
+			GROUP BY no_produk
+		),
+		d AS (
+			SELECT b.no_produk, SUM(isi_palet) AS keluar
+			FROM tr_export_head a
+			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
+			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor <= ?
+			GROUP BY b.no_produk
+		),
 		e AS (
-			SELECT b.item_code, SUM(qty) as peny 
-			FROM tr_inv_adjust_head a 
-			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no 
-			LEFT JOIN ms_item c ON b.item_code = c.item_code 
-			WHERE a.trans_date BETWEEN ? AND ? AND c.item_group = 'PRODUCT' 
+			SELECT b.item_code, SUM(qty) AS peny
+			FROM tr_inv_adjust_head a
+			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
+			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			WHERE a.trans_date > ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
 			GROUP BY b.item_code
-		), 
+		),
 		f AS (
-			SELECT b.item_code, SUM(b.wh2 + b.wh1 + b.mesin + b.qc) as opname 
-			FROM tr_inv_produk_harian_head a 
-			INNER JOIN tr_inv_produk_harian_det b ON a.trans_no = b.trans_no 
-			WHERE a.trans_date = ? 
-			GROUP BY b.item_code
-		), 
+			SELECT det.item_code,
+				SUM(
+					CASE WHEN head.opname_gudang2 = 1 THEN det.wh2 ELSE 0 END
+				) AS opname
+			FROM tr_inv_produk_harian_head head
+			INNER JOIN tr_inv_produk_harian_det det ON head.trans_no = det.trans_no
+			WHERE (head.opname_gudang2 = 1 AND head.trans_date = ?)
+			GROUP BY det.item_code
+		),
 		a AS (
-			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-				IFNULL(b.awal, 0) as awal,
-				IFNULL(c.masuk, 0) as masuk,
-				IFNULL(d.keluar, 0) as keluar,
-				IFNULL(e.peny, 0) as peny,
-				(IFNULL(b.awal, 0) + IFNULL(c.masuk, 0) - IFNULL(d.keluar, 0) + IFNULL(e.peny, 0)) as akhir,
-				IFNULL(f.opname, 0) as opname,
-				0 as selisih
-			FROM ms_item a 
-			LEFT JOIN b ON a.item_code = b.item_code 
-			LEFT JOIN c ON a.item_code = c.no_produk 
-			LEFT JOIN d ON a.item_code = d.no_produk 
-			LEFT JOIN e ON a.item_code = e.item_code 
-			LEFT JOIN f ON a.item_code = f.item_code 
+			SELECT
+				a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group,
+				'' AS location_code,
+				%s AS awal,
+				IFNULL(c.masuk, 0) AS masuk,
+				IFNULL(d.keluar, 0) AS keluar,
+				IFNULL(e.peny, 0) AS peny,
+				%s AS akhir,
+				%s AS opname,
+				0 AS selisih
+			FROM ms_item a
+			LEFT JOIN b ON a.item_code = b.item_code
+			LEFT JOIN masuk_awal ON a.item_code = masuk_awal.no_produk
+			LEFT JOIN keluar_awal ON a.item_code = keluar_awal.no_produk
+			LEFT JOIN peny_awal ON a.item_code = peny_awal.item_code
+			LEFT JOIN c ON a.item_code = c.no_produk
+			LEFT JOIN d ON a.item_code = d.no_produk
+			LEFT JOIN e ON a.item_code = e.item_code
+			LEFT JOIN f ON a.item_code = f.item_code
 			WHERE a.item_group = 'PRODUCT' %s
 		)
-		SELECT a.*, opname as akhr, IFNULL(masuk-(akhir-opname),0) as msk 
-		FROM a 
-		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0 OR opname <> 0
-	`, whereConditions)
+		SELECT a.*
+		FROM a
+		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0
+	`, awalExpr, akhirExpr, opnameExpr, whereConditions)
 
-	// Prepare arguments for the complex query
-	queryArgs := []interface{}{
-		tglInvAwal.Format("2006-01-02"),
-		filter.From.Format("2006-01-02"),
-		filter.To.Format("2006-01-02"),
-		filter.From.Format("2006-01-02"),
-		filter.To.Format("2006-01-02"),
-		filter.From.Format("2006-01-02"),
-		filter.To.Format("2006-01-02"),
-		tglInvAkhir.Format("2006-01-02"),
+	// Urutan args sesuai urutan ? di CTE:
+	// b(2) + masuk_awal(2) + keluar_awal(2) + peny_awal(2) + c(2) + d(2) + e(2) + f(2) = 16 base args
+	baseArgs := []any{
+		dates.TglAwalGudang2.Format("2006-01-02"),  // b:           opname_gudang2=1 AND trans_date = ?
+		dates.TglAwalGudang2.Format("2006-01-02"),  // masuk_awal:  tgl_proses > ?
+		filter.From.Format("2006-01-02"),           // masuk_awal:  tgl_proses <= ?
+		dates.TglAwalGudang2.Format("2006-01-02"),  // keluar_awal: tgl_ekspor > ?
+		filter.From.Format("2006-01-02"),           // keluar_awal: tgl_ekspor <= ?
+		dates.TglAwalGudang2.Format("2006-01-02"),  // peny_awal:   trans_date > ?
+		filter.From.Format("2006-01-02"),           // peny_awal:   trans_date <= ?
+		filter.From.Format("2006-01-02"),           // c:           tgl_proses > ?
+		filter.To.Format("2006-01-02"),             // c:           tgl_proses <= ?
+		filter.From.Format("2006-01-02"),           // d:           tgl_ekspor > ?
+		filter.To.Format("2006-01-02"),             // d:           tgl_ekspor <= ?
+		filter.From.Format("2006-01-02"),           // e:           trans_date > ?
+		filter.To.Format("2006-01-02"),             // e:           trans_date <= ?
+		dates.TglAkhirGudang2.Format("2006-01-02"), // f:           opname_gudang2=1 AND trans_date = ?
 	}
-	queryArgs = append(queryArgs, args...)
 
-	// Get total count first
-	countQuery := fmt.Sprintf("SELECT COUNT(*) FROM (%s) as subquery", baseQuery)
-	var totalCount int64
-	err = r.db.WithContext(ctx).Raw(countQuery, queryArgs...).Scan(&totalCount).Error
+	return query, append(baseArgs, extraArgs...)
+}
+
+// GetReport mengambil laporan produk jadi dengan kalkulasi inventori kompleks.
+// Optimasi:
+//   - getAllProductOpnameDates: 4 tanggal → 1 DB round trip
+//   - COUNT(*) OVER():          query count + data → 1 DB round trip
+func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.FinishedProductReportResponse, int64, error) {
+	dates, err := r.getAllProductOpnameDates(ctx, filter.From, filter.To)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	// Add LIMIT and OFFSET for pagination
-	finalQuery := baseQuery
+	baseQuery, queryArgs := buildBaseQuery(dates, filter)
+
+	var (
+		results    []model.FinishedProductReportResponse
+		totalCount int64
+	)
+
 	if filter.Limit > 0 {
 		offset := 0
 		if filter.Page > 1 {
 			offset = (filter.Page - 1) * filter.Limit
 		}
-		finalQuery += fmt.Sprintf(" LIMIT %d OFFSET %d", filter.Limit, offset)
-	}
 
-	// Execute the final query
-	var results []model.FinishedProductReportResponse
-	err = r.db.WithContext(ctx).Raw(finalQuery, queryArgs...).Scan(&results).Error
-	if err != nil {
-		return nil, 0, err
+		type rowWithCount struct {
+			model.FinishedProductReportResponse
+			TotalCount int64 `gorm:"column:_total_count"`
+		}
+
+		paginatedQuery := fmt.Sprintf(`
+			SELECT inner_q.*, COUNT(*) OVER() AS _total_count
+			FROM (%s) AS inner_q
+			LIMIT %d OFFSET %d
+		`, baseQuery, filter.Limit, offset)
+
+		var rows []rowWithCount
+		if err = r.db.WithContext(ctx).Raw(paginatedQuery, queryArgs...).Scan(&rows).Error; err != nil {
+			return nil, 0, err
+		}
+
+		results = make([]model.FinishedProductReportResponse, len(rows))
+		for i, row := range rows {
+			results[i] = row.FinishedProductReportResponse
+		}
+		if len(rows) > 0 {
+			totalCount = rows[0].TotalCount
+		}
+	} else {
+		if err = r.db.WithContext(ctx).Raw(baseQuery, queryArgs...).Scan(&results).Error; err != nil {
+			return nil, 0, err
+		}
+		totalCount = int64(len(results))
 	}
 
 	return results, totalCount, nil
