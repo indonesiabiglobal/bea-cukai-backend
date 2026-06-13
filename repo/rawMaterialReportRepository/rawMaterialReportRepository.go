@@ -85,8 +85,9 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 	}
 
 	queryAwal := "(IFNULL(b.awal, 0) + (IFNULL(in_after_opname.trf_in, 0) + IFNULL(movein_after_opname.movein_after, 0)) - IFNULL(out_after_opname.trf_out, 0) + IFNULL(peny_after_opname.peny, 0))"
+	queryMasuk := "IFNULL(c.masuk, 0) + IFNULL(g.movein, 0)"
 	// Tentukan ekspresi opname: jika tglInvAkhir == filter.To, gunakan nilai akhir (computed); jika tidak, gunakan data opname dari tabel
-	akhirExpr := "(IFNULL(b.awal, 0) + (IFNULL(in_after_opname.trf_in, 0) + IFNULL(movein_after_opname.movein_after, 0)) - IFNULL(out_after_opname.trf_out, 0) + IFNULL(peny_after_opname.peny, 0)) + IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) - 0 + IFNULL(e.peny, 0)"
+	akhirExpr := fmt.Sprintf("%s + %s - 0 + IFNULL(e.peny, 0)", queryAwal, queryMasuk)
 	opnameExpr := "IFNULL(f.opname, 0)"
 	if tglInvAkhir.Format("2006-01-02") != filter.To.Format("2006-01-02") {
 		opnameExpr = akhirExpr
@@ -167,7 +168,7 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		z AS (
 			SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
 				%s as awal,
-				IFNULL(c.masuk, 0) + IFNULL(g.movein, 0) as masuk,
+				%s as masuk,
 				%s - %s as keluar,
 				IFNULL(e.peny, 0) as peny,
 				%s as akhir,
@@ -186,7 +187,7 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 			WHERE a.item_group = 'MATERIAL' %s
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
-	`, queryAwal, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
+	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
 	fmt.Println("akhirExpr:", akhirExpr)
 	fmt.Println("opnameExpr:", opnameExpr)
 
