@@ -76,29 +76,23 @@ func (r *FinishedProductReportRepository) getMaxProductHarianDate(ctx context.Co
 func (r *FinishedProductReportRepository) getAllProductOpnameDates(ctx context.Context, fromDate, toDate time.Time) (productOpnameDates, error) {
 	var result struct {
 		TglAwalGudang2  string `gorm:"column:tgl_awal_gudang2"`
-		TglAwalGudang0  string `gorm:"column:tgl_awal_gudang0"`
 		TglAkhirGudang2 string `gorm:"column:tgl_akhir_gudang2"`
-		TglAkhirGudang0 string `gorm:"column:tgl_akhir_gudang0"`
 	}
 
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang2,
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 0 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang0,
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang2,
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 0 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang0
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date < ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang2,
+			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang2
 		FROM tr_inv_produk_harian_head
 		WHERE trans_date <= ?
-	`, fromDate.Format("2006-01-02"), fromDate.Format("2006-01-02"),
-		toDate.Format("2006-01-02"), toDate.Format("2006-01-02"),
+	`, fromDate.Format("2006-01-02"),
+		toDate.Format("2006-01-02"),
 		toDate.Format("2006-01-02")).Scan(&result).Error
 
 	defaultDate, _ := time.Parse("2006-01-02", "2000-01-01")
 	dates := productOpnameDates{
 		TglAwalGudang2:  defaultDate,
-		TglAwalGudang0:  defaultDate,
 		TglAkhirGudang2: defaultDate,
-		TglAkhirGudang0: defaultDate,
 	}
 
 	if err != nil {
@@ -108,29 +102,13 @@ func (r *FinishedProductReportRepository) getAllProductOpnameDates(ctx context.C
 	if t, e := time.Parse("2006-01-02", result.TglAwalGudang2); e == nil {
 		dates.TglAwalGudang2 = t
 	}
-	if t, e := time.Parse("2006-01-02", result.TglAwalGudang0); e == nil {
-		dates.TglAwalGudang0 = t
-	}
 	if t, e := time.Parse("2006-01-02", result.TglAkhirGudang2); e == nil {
 		dates.TglAkhirGudang2 = t
-	}
-	if t, e := time.Parse("2006-01-02", result.TglAkhirGudang0); e == nil {
-		dates.TglAkhirGudang0 = t
 	}
 
 	return dates, nil
 }
 
-// buildBaseQuery membangun CTE query dan slice args yang terurut.
-// Pure function — tidak ada DB call, aman untuk unit test.
-//
-// Formula awal:
-//
-//	awal = b.stok_opname
-//	     + masuk_awal  (tgl_proses > TglAwalGudang2 AND <= filter.From)
-//	     - keluar_awal (tgl_ekspor > TglAwalGudang2 AND <= filter.From)
-//	     + peny_awal   (trans_date > TglAwalGudang2 AND <= filter.From)
-//
 // CTE c/d/e menangani periode laporan (filter.From → filter.To) untuk kolom masuk/keluar/peny.
 func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, []any) {
 	whereConditions := ""
@@ -168,14 +146,14 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 		masuk_awal AS (
 			SELECT no_produk, SUM(isi_palet) AS masuk
 			FROM tr_produk_in_head
-			WHERE tgl_proses > ? AND tgl_proses <= ?
+			WHERE tgl_proses > ? AND tgl_proses < ?
 			GROUP BY no_produk
 		),
 		keluar_awal AS (
 			SELECT b.no_produk, SUM(isi_palet) AS keluar
 			FROM tr_export_head a
 			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
-			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor <= ?
+			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor < ?
 			GROUP BY b.no_produk
 		),
 		peny_awal AS (
@@ -183,20 +161,20 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
 			LEFT JOIN ms_item c ON b.item_code = c.item_code
-			WHERE a.trans_date > ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
+			WHERE a.trans_date > ? AND a.trans_date < ? AND c.item_group = 'PRODUCT'
 			GROUP BY b.item_code
 		),
 		c AS (
 			SELECT no_produk, SUM(isi_palet) AS masuk
 			FROM tr_produk_in_head
-			WHERE tgl_proses > ? AND tgl_proses <= ?
+			WHERE tgl_proses >= ? AND tgl_proses <= ?
 			GROUP BY no_produk
 		),
 		d AS (
 			SELECT b.no_produk, SUM(isi_palet) AS keluar
 			FROM tr_export_head a
 			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
-			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor <= ?
+			WHERE a.tgl_ekspor >= ? AND a.tgl_ekspor <= ?
 			GROUP BY b.no_produk
 		),
 		e AS (
@@ -204,7 +182,7 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
 			LEFT JOIN ms_item c ON b.item_code = c.item_code
-			WHERE a.trans_date > ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
+			WHERE a.trans_date >= ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
 			GROUP BY b.item_code
 		),
 		f AS (
@@ -244,8 +222,7 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0
 	`, awalExpr, akhirExpr, opnameExpr, whereConditions)
 
-	// Urutan args sesuai urutan ? di CTE:
-	// b(2) + masuk_awal(2) + keluar_awal(2) + peny_awal(2) + c(2) + d(2) + e(2) + f(2) = 16 base args
+	fmt.Println("dates.TglAwalGudang2", dates.TglAwalGudang2)
 	baseArgs := []any{
 		dates.TglAwalGudang2.Format("2006-01-02"),  // b:           opname_gudang2=1 AND trans_date = ?
 		dates.TglAwalGudang2.Format("2006-01-02"),  // masuk_awal:  tgl_proses > ?
