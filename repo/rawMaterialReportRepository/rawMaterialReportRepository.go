@@ -100,14 +100,10 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 		extraArgs = append(extraArgs, "%"+filter.ItemName+"%")
 	}
 
-	queryAwal := "(IFNULL(b.awal, 0) + (IFNULL(in_after_opname.trf_in, 0) + IFNULL(movein_after_opname.movein_after, 0)) - IFNULL(out_after_opname.trf_out, 0) + IFNULL(peny_after_opname.peny, 0))"
+	queryAwal := "(IFNULL(b.awal, 0) + (IFNULL(masuk_awal.trf_in, 0) + IFNULL(movein_awal.movein_after, 0)) - IFNULL(keluar_awal.trf_out, 0) + IFNULL(peny_after_opname.peny, 0))"
 	queryMasuk := "IFNULL(c.masuk, 0) + IFNULL(g.movein, 0)"
-	akhirExpr := fmt.Sprintf("%s + %s - 0 + IFNULL(e.peny, 0)", queryAwal, queryMasuk)
+	akhirExpr := fmt.Sprintf("%s + %s - IFNULL(keluar.keluar,0) + IFNULL(e.peny, 0)", queryAwal, queryMasuk)
 
-	// Jika tglInvAkhir == filter.To: ada data opname tepat di tanggal akhir,
-	// gunakan IFNULL(f.opname, 0) dari tabel.
-	// Jika tidak: tidak ada opname di tanggal filter.To,
-	// gunakan nilai akhir (computed) sebagai opname.
 	opnameExpr := "IFNULL(f.opname, 0)"
 	if tglInvAkhir.Format("2006-01-02") != filter.To.Format("2006-01-02") {
 		opnameExpr = akhirExpr
@@ -125,7 +121,7 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			SELECT item_code, SUM(qty) AS masuk
 			FROM tr_ap_inv_head a
 			INNER JOIN tr_ap_inv_det b ON a.trans_no = b.trans_no
-			WHERE a.in_date BETWEEN ? AND ?
+			WHERE a.in_date >= ? AND a.in_date <= ?
 			GROUP BY item_code
 		),
 		e AS (
@@ -133,7 +129,8 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
 			LEFT JOIN ms_item c ON b.item_code = c.item_code
-			WHERE a.trans_date BETWEEN ? AND ? AND c.item_group = 'MATERIAL'
+			WHERE a.trans_date >= ? AND a.trans_date <= ?
+			AND c.item_group = 'MATERIAL'
 			GROUP BY b.item_code
 		),
 		f AS (
@@ -147,30 +144,38 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			SELECT item_code, SUM(qty) AS movein
 			FROM tr_inv_movein_head moveinhead
 			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no
-			WHERE moveinhead.trans_date BETWEEN ? AND ?
+			WHERE moveinhead.trans_date >= ? AND moveinhead.trans_date <= ?
 			AND moveindet.location_code = 'WH-MAT-2'
 			GROUP BY item_code
 		),
-		out_after_opname AS (
+		keluar AS (
+			SELECT apdet.item_code, SUM(rmdet.qty) AS keluar
+			FROM tr_inv_rm_head rmhead
+			INNER JOIN tr_inv_rm_det rmdet ON rmhead.trans_no = rmdet.trans_no
+			INNER JOIN tr_ap_inv_det apdet ON rmdet.data_no = apdet.data_no
+			WHERE rmhead.trans_date >= ? AND rmhead.trans_date <= ?
+			GROUP BY apdet.item_code
+		),
+		keluar_awal AS (
 			SELECT apdet.item_code, SUM(rmdet.qty) AS trf_out
 			FROM tr_inv_rm_head rmhead
 			INNER JOIN tr_inv_rm_det rmdet ON rmhead.trans_no = rmdet.trans_no
 			INNER JOIN tr_ap_inv_det apdet ON rmdet.data_no = apdet.data_no
-			WHERE rmhead.trans_date BETWEEN ? AND ?
+			WHERE rmhead.trans_date > ? AND rmhead.trans_date < ?
 			GROUP BY apdet.item_code
 		),
-		in_after_opname AS (
+		masuk_awal AS (
 			SELECT apdet.item_code, SUM(apdet.qty) AS trf_in
 			FROM tr_ap_inv_head aphead
 			INNER JOIN tr_ap_inv_det apdet ON aphead.trans_no = apdet.trans_no
-			WHERE aphead.in_date BETWEEN ? AND ?
+			WHERE aphead.in_date > ? AND aphead.in_date < ?
 			GROUP BY apdet.item_code
 		),
-		movein_after_opname AS (
+		movein_awal AS (
 			SELECT item_code, SUM(qty) AS movein_after
 			FROM tr_inv_movein_head moveinhead
 			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no
-			WHERE moveinhead.trans_date BETWEEN ? AND ?
+			WHERE moveinhead.trans_date > ? AND moveinhead.trans_date < ?
 			AND moveindet.location_code = 'WH-MAT-2'
 			GROUP BY item_code
 		),
@@ -179,7 +184,8 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
 			LEFT JOIN ms_item c ON b.item_code = c.item_code
-			WHERE a.trans_date BETWEEN ? AND ? AND c.item_group = 'MATERIAL'
+			WHERE a.trans_date > ? AND a.trans_date < ? 
+			AND c.item_group = 'MATERIAL'
 			GROUP BY b.item_code
 		),
 		z AS (
@@ -188,44 +194,44 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 				'' AS location_code,
 				%s AS awal,
 				%s AS masuk,
-				%s - %s AS keluar,
+				IFNULL(keluar.keluar, 0) AS keluar,
 				IFNULL(e.peny, 0) AS peny,
 				%s AS akhir,
 				%s AS opname,
-				0 AS selisih
+				(%s) - (%s) AS selisih
 			FROM ms_item a
 			LEFT JOIN b ON a.item_code = b.item_code
 			LEFT JOIN c ON a.item_code = c.item_code
 			LEFT JOIN e ON a.item_code = e.item_code
 			LEFT JOIN f ON a.item_code = f.item_code
 			LEFT JOIN g ON a.item_code = g.item_code
-			LEFT JOIN out_after_opname ON a.item_code = out_after_opname.item_code
-			LEFT JOIN in_after_opname ON a.item_code = in_after_opname.item_code
-			LEFT JOIN movein_after_opname ON a.item_code = movein_after_opname.item_code
+			LEFT JOIN keluar ON a.item_code = keluar.item_code
+			LEFT JOIN keluar_awal ON a.item_code = keluar_awal.item_code
+			LEFT JOIN masuk_awal ON a.item_code = masuk_awal.item_code
+			LEFT JOIN movein_awal ON a.item_code = movein_awal.item_code
 			LEFT JOIN peny_after_opname ON a.item_code = peny_after_opname.item_code
 			WHERE a.item_group = 'MATERIAL' %s
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
 	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
 
-	afterStart := tglInvAwal.AddDate(0, 0, 1).Format("2006-01-02")
-	afterEnd := filter.From.AddDate(0, 0, -1).Format("2006-01-02")
-
 	// Urutan args harus sesuai dengan urutan ? di query CTE di atas:
 	// b(1) + c(2) + e(2) + f(1) + g(2) + out_after(2) + in_after(2) + movein_after(2) + peny_after(2) = 16
 	baseArgs := []interface{}{
-		tglInvAwal.Format("2006-01-02"),  // b:              awal date
-		filter.From.Format("2006-01-02"), // c:              masuk from
-		filter.To.Format("2006-01-02"),   // c:              masuk to
-		filter.From.Format("2006-01-02"), // e:              peny from
-		filter.To.Format("2006-01-02"),   // e:              peny to
-		tglInvAkhir.Format("2006-01-02"), // f:              opname date
-		filter.From.Format("2006-01-02"), // g:              movein from
-		filter.To.Format("2006-01-02"),   // g:              movein to
-		afterStart, afterEnd,             // out_after_opname
-		afterStart, afterEnd,             // in_after_opname
-		afterStart, afterEnd,             // movein_after_opname
-		afterStart, afterEnd,             // peny_after_opname
+		tglInvAwal.Format("2006-01-02"),                                   // b:              awal date
+		filter.From.Format("2006-01-02"),                                  // c:              masuk from
+		filter.To.Format("2006-01-02"),                                    // c:              masuk to
+		filter.From.Format("2006-01-02"),                                  // e:              peny from
+		filter.To.Format("2006-01-02"),                                    // e:              peny to
+		tglInvAkhir.Format("2006-01-02"),                                  // f:              opname date
+		filter.From.Format("2006-01-02"),                                  // g:              movein from
+		filter.To.Format("2006-01-02"),                                    // g:              movein to
+		filter.From.Format("2006-01-02"),                                  // keluar from
+		filter.To.Format("2006-01-02"),                                    // keluar to
+		tglInvAwal.Format("2006-01-02"), filter.From.Format("2006-01-02"), // keluar_awal
+		tglInvAwal.Format("2006-01-02"), filter.From.Format("2006-01-02"), // masuk_awal
+		tglInvAwal.Format("2006-01-02"), filter.From.Format("2006-01-02"), // movein_awal
+		tglInvAwal.Format("2006-01-02"), filter.From.Format("2006-01-02"), // peny_after_opname
 	}
 
 	return query, append(baseArgs, extraArgs...)

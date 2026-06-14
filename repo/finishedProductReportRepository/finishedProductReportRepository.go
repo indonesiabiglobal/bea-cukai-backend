@@ -205,7 +205,7 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 				IFNULL(e.peny, 0) AS peny,
 				%s AS akhir,
 				%s AS opname,
-				0 AS selisih
+				(%s) - (%s) AS selisih
 			FROM ms_item a
 			LEFT JOIN b ON a.item_code = b.item_code
 			LEFT JOIN masuk_awal ON a.item_code = masuk_awal.no_produk
@@ -220,9 +220,8 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 		SELECT a.*
 		FROM a
 		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0
-	`, awalExpr, akhirExpr, opnameExpr, whereConditions)
+	`, awalExpr, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
 
-	fmt.Println("dates.TglAwalGudang2", dates.TglAwalGudang2)
 	baseArgs := []any{
 		dates.TglAwalGudang2.Format("2006-01-02"),  // b:           opname_gudang2=1 AND trans_date = ?
 		dates.TglAwalGudang2.Format("2006-01-02"),  // masuk_awal:  tgl_proses > ?
