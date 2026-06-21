@@ -181,7 +181,7 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 	f.SetCellValue(sheetName, "C6", ": Blok M-3-2, Kawasan MM2100, Cikarang Barat, Bekasi, 17520")
 	f.SetCellValue(sheetName, "A7", "Periode Laporan")
 	f.SetCellValue(sheetName, "C7", fmt.Sprintf(": %s s.d %s", from.Format("02-01-2006"), to.Format("02-01-2006")))
-	
+
 	// Merge cells for company info values (extend to column L for 12 columns)
 	f.MergeCell(sheetName, "A1", "L1") // Company name
 	f.MergeCell(sheetName, "A2", "L2") // Report title
@@ -229,13 +229,13 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 	// Fill data starting from row 11
 	for i, item := range data {
 		row := i + 11
-		
+
 		// Convert decimal.Decimal to float64 for proper number formatting in Excel
 		awalFloat, _ := item.Awal.Float64()
-		mskFloat, _ := item.Msk.Float64()
+		mskFloat, _ := item.Masuk.Float64()
 		keluarFloat, _ := item.Keluar.Float64()
 		penyFloat, _ := item.Peny.Float64()
-		AkhirFloat, _ := item.Akhr.Float64()
+		AkhirFloat, _ := item.Akhir.Float64()
 		selisihFloat, _ := item.Selisih.Float64()
 		opnameFloat, _ := item.Opname.Float64()
 
@@ -296,19 +296,19 @@ func (c *FinishedProductReportController) generateExcelFile(data []model.Finishe
 	// Apply data styles
 	if len(data) > 0 {
 		lastRow := len(data) + 10
-		f.SetCellStyle(sheetName, "A11", fmt.Sprintf("A%d", lastRow), dataStyle)  // No
-		f.SetCellStyle(sheetName, "B11", fmt.Sprintf("D%d", lastRow), dataStyle)  // Text columns
+		f.SetCellStyle(sheetName, "A11", fmt.Sprintf("A%d", lastRow), dataStyle)   // No
+		f.SetCellStyle(sheetName, "B11", fmt.Sprintf("D%d", lastRow), dataStyle)   // Text columns
 		f.SetCellStyle(sheetName, "E11", fmt.Sprintf("K%d", lastRow), numberStyle) // Number columns
-		f.SetCellStyle(sheetName, "L11", fmt.Sprintf("L%d", lastRow), dataStyle)  // Keterangan
+		f.SetCellStyle(sheetName, "L11", fmt.Sprintf("L%d", lastRow), dataStyle)   // Keterangan
 	}
 
 	// Set column widths
-	f.SetColWidth(sheetName, "A", "A", 5)   // No
-	f.SetColWidth(sheetName, "B", "B", 15)  // Kode Barang
-	f.SetColWidth(sheetName, "C", "C", 25)  // Nama Barang
-	f.SetColWidth(sheetName, "D", "D", 8)   // Satuan
-	f.SetColWidth(sheetName, "E", "K", 12)  // Numeric columns
-	f.SetColWidth(sheetName, "L", "L", 15)  // Keterangan
+	f.SetColWidth(sheetName, "A", "A", 5)  // No
+	f.SetColWidth(sheetName, "B", "B", 15) // Kode Barang
+	f.SetColWidth(sheetName, "C", "C", 25) // Nama Barang
+	f.SetColWidth(sheetName, "D", "D", 8)  // Satuan
+	f.SetColWidth(sheetName, "E", "K", 12) // Numeric columns
+	f.SetColWidth(sheetName, "L", "L", 15) // Keterangan
 
 	// Generate filename with timestamp
 	timestamp := time.Now().Format("20060102150405")
