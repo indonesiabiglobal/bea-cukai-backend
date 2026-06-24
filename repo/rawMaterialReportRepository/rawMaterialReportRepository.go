@@ -210,8 +210,7 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			LEFT JOIN masuk_awal ON item.item_code = masuk_awal.item_code
 			LEFT JOIN movein_awal ON item.item_code = movein_awal.item_code
 			LEFT JOIN peny_after_opname ON item.item_code = peny_after_opname.item_code
-			WHERE item.item_group = 'MATERIAL' %s
-			AND item.item_type_code NOT LIKE 'Recycle%'
+			WHERE item.item_group = 'MATERIAL' AND item.item_type_code NOT LIKE 'Recycle%' %s
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
 	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
