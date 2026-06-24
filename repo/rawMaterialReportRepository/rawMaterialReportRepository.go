@@ -92,11 +92,11 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 	extraArgs := []interface{}{}
 
 	if filter.ItemCode != "" {
-		whereConditions += " AND a.item_code LIKE ?"
+		whereConditions += " AND item.item_code LIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemCode+"%")
 	}
 	if filter.ItemName != "" {
-		whereConditions += " AND a.item_name LIKE ?"
+		whereConditions += " AND item.item_name LIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemName+"%")
 	}
 
@@ -190,7 +190,7 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 		),
 		z AS (
 			SELECT
-				a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group,
+				item.item_code, item.item_name, item.unit_code, item.item_type_code, item.item_group,
 				'' AS location_code,
 				%s AS awal,
 				%s AS masuk,
@@ -211,7 +211,7 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 			LEFT JOIN movein_awal ON item.item_code = movein_awal.item_code
 			LEFT JOIN peny_after_opname ON item.item_code = peny_after_opname.item_code
 			WHERE item.item_group = 'MATERIAL' %s
-			AND item.item_type_code NOT ILIKE 'Recycle%'
+			AND item.item_type_code NOT LIKE 'Recycle%'
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
 	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
