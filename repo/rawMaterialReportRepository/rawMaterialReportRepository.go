@@ -199,18 +199,19 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 				%s AS akhir,
 				%s AS opname,
 				(%s) - (%s) AS selisih
-			FROM ms_item a
-			LEFT JOIN b ON a.item_code = b.item_code
-			LEFT JOIN c ON a.item_code = c.item_code
-			LEFT JOIN e ON a.item_code = e.item_code
-			LEFT JOIN f ON a.item_code = f.item_code
-			LEFT JOIN g ON a.item_code = g.item_code
-			LEFT JOIN keluar ON a.item_code = keluar.item_code
-			LEFT JOIN keluar_awal ON a.item_code = keluar_awal.item_code
-			LEFT JOIN masuk_awal ON a.item_code = masuk_awal.item_code
-			LEFT JOIN movein_awal ON a.item_code = movein_awal.item_code
-			LEFT JOIN peny_after_opname ON a.item_code = peny_after_opname.item_code
-			WHERE a.item_group = 'MATERIAL' %s
+			FROM ms_item item
+			LEFT JOIN b ON item.item_code = b.item_code
+			LEFT JOIN c ON item.item_code = c.item_code
+			LEFT JOIN e ON item.item_code = e.item_code
+			LEFT JOIN f ON item.item_code = f.item_code
+			LEFT JOIN g ON item.item_code = g.item_code
+			LEFT JOIN keluar ON item.item_code = keluar.item_code
+			LEFT JOIN keluar_awal ON item.item_code = keluar_awal.item_code
+			LEFT JOIN masuk_awal ON item.item_code = masuk_awal.item_code
+			LEFT JOIN movein_awal ON item.item_code = movein_awal.item_code
+			LEFT JOIN peny_after_opname ON item.item_code = peny_after_opname.item_code
+			WHERE item.item_group = 'MATERIAL' %s
+			AND item.item_type_code NOT ILIKE 'Recycle%'
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
 	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
