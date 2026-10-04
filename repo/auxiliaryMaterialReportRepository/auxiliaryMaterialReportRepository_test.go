@@ -70,7 +70,7 @@ func TestGetReport_MergesLiveMasukIntoItoryStock(t *testing.T) {
 	}
 	from, to := time.Date(2026, 9, 1, 0, 0, 0, 0, time.Local), time.Date(2026, 9, 30, 0, 0, 0, 0, time.Local)
 	res, total, err := NewAuxiliaryMaterialReportRepository(gormDB, masuk).GetReport(context.Background(),
-		GetReportFilter{From: from, To: to, Lap: "BOX", ItemName: "kardus", Page: 1, Limit: 10})
+		GetReportFilter{From: from, To: to, Lap: "Box", ItemName: "kardus", Page: 1, Limit: 10})
 	if err != nil {
 		t.Fatal(err)
 	}

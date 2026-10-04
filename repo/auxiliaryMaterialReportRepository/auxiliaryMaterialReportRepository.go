@@ -5,6 +5,7 @@ import (
 	"Bea-Cukai/repo/entryProductRepository"
 	"context"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/shopspring/decimal"
@@ -88,13 +89,15 @@ const stockSQL = `
 
 // GetReport retrieves auxiliary material report with complex inventory calculations
 func (r *AuxiliaryMaterialReportRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.AuxiliaryMaterialReportResponse, int64, error) {
+	// Itory stores groups uppercase (BOX/GAISO/INK) while the frontend sends "Box"; MySQL matched case-insensitively.
+	lap := strings.ToUpper(filter.Lap)
 	query := stockSQL
 	args := []any{
 		filter.From.AddDate(0, 0, -1).Format("2006-01-02"), // beginning balance = opname the day before
-		filter.Lap,
-		filter.Lap, filter.From.Format("2006-01-02"), filter.To.Format("2006-01-02"), // peny
-		filter.Lap, filter.To.Format("2006-01-02"), // closing opname
-		filter.Lap,
+		lap,
+		lap, filter.From.Format("2006-01-02"), filter.To.Format("2006-01-02"), // peny
+		lap, filter.To.Format("2006-01-02"), // closing opname
+		lap,
 	}
 	if filter.ItemCode != "" {
 		query += " AND a.item_code ILIKE ?"
