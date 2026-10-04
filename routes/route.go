@@ -11,7 +11,6 @@ import (
 	"Bea-Cukai/controller/productController"
 	"Bea-Cukai/controller/rawMaterialReportController"
 	"Bea-Cukai/controller/rejectScrapReportController"
-	"Bea-Cukai/controller/syncController"
 	"Bea-Cukai/controller/transactionLogController"
 	"Bea-Cukai/controller/userController"
 	"Bea-Cukai/controller/userLogController"
@@ -127,7 +126,6 @@ func NewRoute(fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	machineToolReportController := machineToolReportController.NewMachineToolReportController(machineToolReportService)
 	rejectScrapReportController := rejectScrapReportController.NewRejectScrapReportController(rejectScrapReportService)
 	auxiliaryMaterialReportController := auxiliaryMaterialReportController.NewAuxiliaryMaterialReportController(auxiliaryMaterialReportService)
-	syncController := syncController.NewSyncController()
 
 	app := gin.Default()
 
@@ -260,17 +258,6 @@ func NewRoute(fkiDB, itoryDB *gorm.DB) *gin.Engine {
 		{
 			transactionLogs.GET("", transactionLogController.GetAll)
 			transactionLogs.GET("/export", transactionLogController.ExportExcel)
-		}
-	}
-
-	// Sync: Database synchronization
-	sync := app.Group("/sync")
-	{
-		sync.Use(middleware.Authentication())
-		{
-			sync.POST("/run", syncController.RunSync)
-			sync.GET("/status", syncController.GetSyncStatus)
-			sync.GET("/log", syncController.GetSyncLog)
 		}
 	}
 
