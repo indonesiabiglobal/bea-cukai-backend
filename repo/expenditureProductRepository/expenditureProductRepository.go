@@ -60,7 +60,7 @@ SELECT
 FROM tr_ar_inv_head head
 INNER JOIN tr_ar_inv_det_direct det ON head.trans_no = det.trans_no
 INNER JOIN ms_cust cust ON head.cust_code = cust.cust_code
-WHERE (jenis_pabean <> '' OR cukai_no <> '') -- old (2012-2014) docs have cukai_no but no jenis_pabean
+WHERE cukai_no <> '' -- BC number required; old (2012-2014) docs have it without jenis_pabean
 	AND approved_date > '2012-01-01'
 	AND canceled_date < approved_date`
 

@@ -65,11 +65,11 @@ SELECT
 FROM tr_ap_inv_det_direct det
 INNER JOIN tr_ap_inv_head head ON head.trans_no = det.trans_no
 INNER JOIN ms_vendor vend ON head.vendor_code = vend.vendor_code
-WHERE (jenis_pabean <> '' OR cukai_no <> '') -- old (2012-2014) docs have cukai_no but no jenis_pabean
+WHERE cukai_no <> '' -- BC number required; old (2012-2014) docs have it without jenis_pabean
 	AND approved_date <> '2012-01-01'
 	AND canceled_date < approved_date`
 
-// ponytail: the non-empty bc_type filter mirrors FKI's jenis_pabean filter; Itory has no approved/canceled filter yet.
+// ponytail: non-empty bc_type/bc_no mirrors FKI's cukai_no filter; Itory has no approved/canceled filter yet.
 const itoryEntrySQL = `
 SELECT
 	bc_type AS jenis_pabean,
@@ -93,7 +93,7 @@ FROM tr_ap_inv_det det
 INNER JOIN tr_ap_inv_head head ON head.trans_no = det.trans_no
 INNER JOIN ms_vendor vend ON head.vendor_code = vend.vendor_code
 INNER JOIN ms_item item ON det.item_code = item.item_code
-WHERE bc_type <> ''`
+WHERE bc_type <> '' AND bc_no <> ''`
 
 // ---- Core aggregations ----
 
@@ -210,6 +210,7 @@ func dropDuplicates(rows []entryRow, dup map[string]bool) []entryRow {
 // itoryDuplicates returns which FKI vend_dlv_no keys also exist in Itory, so Itory wins.
 // Checked against the whole Itory source (not the report filter): an Itory copy with a
 // different bc_date/item still counts as a duplicate. Empty vend_dlv_no never matches.
+// An Itory copy without bc_type/bc_no is not in the report, so it doesn't count and the FKI row stays.
 // The wrapping subquery is fine here: Postgres inlines it (unlike FKI's MySQL 5.5).
 // ponytail: one IN list; Postgres caps at 65535 params, chunk if a range ever exceeds that.
 func (c *EntryProductRepository) itoryDuplicates(ctx context.Context, fkiRows []entryRow) (map[string]bool, error) {
