@@ -73,6 +73,10 @@ func TestGetReport_MergesBothSourcesSorted(t *testing.T) {
 			AddRow("BC 2.3", "F1", d1, "FKI-001", "A", "Item A", "1.5", "PCS", 1).
 			AddRow("BC 2.3", "F1", d1, "FKI-001", "B", "Item B", "2", "KG", 2))
 
+	// Cek duplikat ke Itory (tidak ada yang cocok)
+	itoryMock.ExpectQuery(regexp.QuoteMeta("string_to_array")).
+		WillReturnRows(sqlmock.NewRows([]string{"ref_key", "bc_no", "bc_date", "vendor_code"}))
+
 	// Postgres harus memakai placeholder $n, bukan ?
 	itoryMock.ExpectQuery(regexp.QuoteMeta("AND bc_date BETWEEN $1 AND $2 AND bc_type = $3")).
 		WithArgs("2026-09-01", "2026-09-30", "BC 2.3").
@@ -108,41 +112,57 @@ func TestGetReport_MergesBothSourcesSorted(t *testing.T) {
 	}
 }
 
-// Test 2: dokumen yang ada di FKI dan Itory (invoice_no = ref_no) hanya diambil dari Itory.
-// Pencocokan abaikan spasi & huruf besar/kecil; vend_dlv_no kosong tidak pernah dianggap duplikat.
-func TestGetReport_FKIDuplicateOfItoryIsDropped(t *testing.T) {
+// Test 2: dokumen yang ada di FKI dan Itory hanya diambil dari Itory. Cocok kalau invoice sama
+// (abaikan spasi & huruf besar/kecil; invoice kosong tak pernah cocok), atau BC no + tgl + vendor sama
+// selama dokumen Itory itu belum jadi pasangan invoice dokumen FKI lain.
+func TestGetReport_FKICopyOfItoryIsDropped(t *testing.T) {
 	fkiDB, fkiMock := newMockMySQL(t)
 	itoryDB, itoryMock := newMockPostgres(t)
 	repo := NewEntryProductRepository(fkiDB, itoryDB)
 
-	d1 := mustParseDate("2026-09-01")
-	cols := append(entryCols, "vend_dlv_no")
+	d1, d2 := mustParseDate("2026-09-01"), mustParseDate("2026-09-02")
+	d1WIB := time.Date(2026, 9, 1, 0, 0, 0, 0, time.FixedZone("WIB", 7*3600))
+	cols := append(entryCols, "vend_dlv_no", "vendor_code")
 
 	fkiMock.ExpectQuery(regexp.QuoteMeta("FROM tr_ap_inv_det_direct det")).
 		WillReturnRows(sqlmock.NewRows(cols).
-			AddRow("BC 2.3", "F1", d1, "FKI-001", "A", "Item A", "1", "PCS", 1, " inv-1 "). // duplikat
-			AddRow("BC 2.3", "F2", d1, "FKI-002", "B", "Item B", "1", "PCS", 1, "INV-2").   // hanya di FKI
-			AddRow("BC 2.3", "F3", d1, "FKI-003", "C", "Item C", "1", "PCS", 1, ""))        // tanpa invoice
+			AddRow("BC 2.3", "F1", d1, "FKI-001", "A", "Item A", "1", "PCS", 1, " inv-1 ", "V1").     // invoice sama
+			AddRow("BC 2.3", "F2", d1, "FKI-002", "B", "Item B", "1", "PCS", 1, "INV-2", "V1").       // hanya di FKI
+			AddRow("BC 2.3", "F3", d1, "FKI-003", "C", "Item C", "1", "PCS", 1, "", "V1").            // tanpa invoice
+			AddRow("BC 2.3", "F4", d1, "FKI-004", "D", "Item D", "1", "PCS", 1, "INV-4 (MB)", "V1").  // BC sama
+			AddRow("BC 2.3", "F4", d1, "FKI-005", "E", "Item E", "1", "PCS", 1, "INV-4 (MB)", "V2").  // BC sama, vendor beda
+			AddRow("BC 2.3", "F6", d1, "FKI-006", "F", "Item F", "1", "PCS", 1, "INV-6", "V1").       // invoice sama
+			AddRow("BC 2.3", "F6", d1, "FKI-007", "G", "Item G", "1", "PCS", 1, "INV-6 (GIT)", "V1"). // BC sama, Itory sudah dipasangkan
+			AddRow("BC 2.3", "F4", d2, "FKI-008", "H", "Item H", "1", "PCS", 1, "INV-8", "V1").       // BC no sama, tanggal beda
+			AddRow("BC 2.3", "F9", d1WIB, "FKI-009", "I", "Item I", "1", "PCS", 1, "INV-9", "V1"))    // hari sama: WIB (MySQL) vs UTC (pgx)
 
-	// Cek duplikat ke Itory: hanya key non-kosong, sudah dinormalisasi, tanpa filter laporan
-	itoryMock.ExpectQuery(regexp.QuoteMeta("SELECT DISTINCT UPPER(TRIM(vend_dlv_no))")).
-		WithArgs("INV-1", "INV-2").
-		WillReturnRows(sqlmock.NewRows([]string{"k"}).AddRow("INV-1"))
+	itoryMock.ExpectQuery(regexp.QuoteMeta("= ANY(string_to_array($1, chr(31))) OR TRIM(no_pabean) = ANY(string_to_array($2, chr(31)))")).
+		WithArgs("INV-1\x1fINV-2\x1fINV-4 (MB)\x1fINV-6\x1fINV-6 (GIT)\x1fINV-8\x1fINV-9", "F1\x1fF2\x1fF3\x1fF4\x1fF6\x1fF9").
+		WillReturnRows(sqlmock.NewRows([]string{"ref_key", "bc_no", "bc_date", "vendor_code"}).
+			AddRow("INV-1", "X1", d1, "V1").
+			AddRow("INV-4", "F4", d1, "V1").
+			AddRow("INV-6", "F6", d1, "V1").
+			AddRow("X9", "F9", d1, "V1"))
 
 	itoryMock.ExpectQuery(regexp.QuoteMeta("FROM tr_ap_inv_det det")).
 		WillReturnRows(sqlmock.NewRows(cols).
-			AddRow("BC 2.3", "I1", d1, "ITR-001", "A", "Item A", "1", "PCS", 1, "INV-1"))
+			AddRow("BC 2.3", "I1", d1, "ITR-001", "A", "Item A", "1", "PCS", 1, "INV-1", "V1"))
 
-	res, total, err := repo.GetReport(context.Background(), GetReportFilter{From: d1, To: d1})
+	res, total, err := repo.GetReport(context.Background(), GetReportFilter{From: d1, To: d2})
 	if err != nil {
 		t.Fatalf("GetReport: %v", err)
 	}
-	if total != 3 {
-		t.Fatalf("want 3 rows (ITR-001, FKI-002, FKI-003), got %d: %+v", total, res)
-	}
+	got := map[string]bool{}
 	for _, r := range res {
-		if r.TransNo == "FKI-001" {
-			t.Error("FKI-001 duplikat dari Itory INV-1, harus dibuang")
+		got[r.TransNo] = true
+	}
+	want := map[string]bool{"ITR-001": true, "FKI-002": true, "FKI-003": true, "FKI-005": true, "FKI-007": true, "FKI-008": true}
+	if total != int64(len(want)) || len(got) != len(want) {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	for k := range want {
+		if !got[k] {
+			t.Errorf("missing %s (got %v)", k, got)
 		}
 	}
 	if err := fkiMock.ExpectationsWereMet(); err != nil {

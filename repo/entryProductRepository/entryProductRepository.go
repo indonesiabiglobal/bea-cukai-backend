@@ -196,49 +196,82 @@ func localDate(t time.Time) time.Time {
 // dlvKey normalizes vend_dlv_no for FKI↔Itory matching (FKI invoice_no = Itory ref_no).
 func dlvKey(s string) string { return strings.ToUpper(strings.TrimSpace(s)) }
 
-// dropDuplicates removes rows whose vend_dlv_no key is in dup.
-func dropDuplicates(rows []entryRow, dup map[string]bool) []entryRow {
-	kept := rows[:0]
-	for _, r := range rows {
-		if !dup[dlvKey(r.VendDlvNo)] {
+// bcKey identifies one customs document: BC number + BC date + vendor.
+func bcKey(noPabean string, tglPabean time.Time, vendorCode string) string {
+	return strings.TrimSpace(noPabean) + "|" + tglPabean.Format("2006-01-02") + "|" + vendorCode
+}
+
+// itoryHead is an Itory report document that may be the same as an FKI one.
+type itoryHead struct {
+	RefKey, BcNo, VendorCode string
+	BcDate                   time.Time
+}
+
+// keyList joins keys for string_to_array(?, chr(31)): one bound parameter, so no 65535-param cap.
+func keyList(seen map[string]bool) string {
+	keys := make([]string, 0, len(seen))
+	for k := range seen {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return strings.Join(keys, "\x1f")
+}
+
+// itoryCopiesDropped removes FKI rows whose document is also in Itory, so Itory wins. A match is:
+//   - same invoice (FKI invoice_no = Itory ref_no, normalized; empty never matches), or
+//   - same BC no + BC date + vendor, when that Itory doc isn't already the invoice match of another
+//     FKI doc (FKI often adds " (MB)", " (GIT)", "_MB" etc. or a typo to the invoice).
+//
+// Checked against the whole Itory source, not the report filter; an Itory copy without bc_type/bc_no
+// is not in the report, so it doesn't count and the FKI row stays.
+// The wrapping subquery is fine here: Postgres inlines it (unlike FKI's MySQL 5.5).
+// ponytail: "already matched" only sees the fetched FKI rows; an item filter can hide the matching
+// doc (rare GIT pairs under one BC) - query FKI heads for the BC keys if that ever matters.
+func (c *EntryProductRepository) itoryCopiesDropped(ctx context.Context, fkiRows []entryRow) ([]entryRow, error) {
+	invoices, bcNos := map[string]bool{}, map[string]bool{}
+	for _, r := range fkiRows {
+		if k := dlvKey(r.VendDlvNo); k != "" {
+			invoices[k] = true
+		}
+		if no := strings.TrimSpace(r.NoPabean); no != "" {
+			bcNos[no] = true
+		}
+	}
+	if len(invoices) == 0 && len(bcNos) == 0 {
+		return fkiRows, nil
+	}
+
+	var heads []itoryHead
+	err := c.itoryDB.WithContext(ctx).Raw(
+		"SELECT DISTINCT UPPER(TRIM(vend_dlv_no)) AS ref_key, TRIM(no_pabean) AS bc_no, tgl_pabean AS bc_date, vendor_code\n"+
+			"FROM ("+itoryEntrySQL+"\n) src\n"+
+			"WHERE UPPER(TRIM(vend_dlv_no)) = ANY(string_to_array(?, chr(31))) OR TRIM(no_pabean) = ANY(string_to_array(?, chr(31)))",
+		keyList(invoices), keyList(bcNos)).Scan(&heads).Error
+	if err != nil {
+		return nil, err
+	}
+
+	itoryInvoices, freeBC := map[string]bool{}, map[string]bool{}
+	for _, h := range heads {
+		if h.RefKey != "" {
+			itoryInvoices[h.RefKey] = true
+		}
+		if h.RefKey == "" || !invoices[h.RefKey] {
+			freeBC[bcKey(h.BcNo, h.BcDate, h.VendorCode)] = true
+		}
+	}
+
+	kept := fkiRows[:0]
+	for _, r := range fkiRows {
+		if !itoryInvoices[dlvKey(r.VendDlvNo)] && !freeBC[bcKey(r.NoPabean, r.TglPabean, r.VendorCode)] {
 			kept = append(kept, r)
 		}
 	}
-	return kept
-}
-
-// itoryDuplicates returns which FKI vend_dlv_no keys also exist in Itory, so Itory wins.
-// Checked against the whole Itory source (not the report filter): an Itory copy with a
-// different bc_date/item still counts as a duplicate. Empty vend_dlv_no never matches.
-// An Itory copy without bc_type/bc_no is not in the report, so it doesn't count and the FKI row stays.
-// The wrapping subquery is fine here: Postgres inlines it (unlike FKI's MySQL 5.5).
-// ponytail: one IN list; Postgres caps at 65535 params, chunk if a range ever exceeds that.
-func (c *EntryProductRepository) itoryDuplicates(ctx context.Context, fkiRows []entryRow) (map[string]bool, error) {
-	seen := map[string]bool{}
-	keys := []string{}
-	for _, r := range fkiRows {
-		if k := dlvKey(r.VendDlvNo); k != "" && !seen[k] {
-			seen[k] = true
-			keys = append(keys, k)
-		}
-	}
-	dup := map[string]bool{}
-	if len(keys) == 0 {
-		return dup, nil
-	}
-
-	var found []string
-	err := c.itoryDB.WithContext(ctx).Raw(
-		"SELECT DISTINCT UPPER(TRIM(vend_dlv_no)) FROM ("+itoryEntrySQL+"\n) src WHERE UPPER(TRIM(vend_dlv_no)) IN ?",
-		keys).Scan(&found).Error
-	for _, k := range found {
-		dup[k] = true
-	}
-	return dup, err
+	return kept, nil
 }
 
 // GetReport retrieves entry products from FKI + Itory with filters and pagination.
-// A document present in both sources (same vend_dlv_no) is taken from Itory only.
+// A document present in both sources (see itoryCopiesDropped) is taken from Itory only.
 // ponytail: both sources are fully loaded for the date range then paged in memory;
 // if ranges grow too large, fetch only offset+limit rows per source and merge.
 func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.EntryProduct, int64, error) {
@@ -246,11 +279,10 @@ func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReport
 	if err != nil {
 		return nil, 0, err
 	}
-	dup, err := c.itoryDuplicates(ctx, fkiRows)
+	fkiRows, err = c.itoryCopiesDropped(ctx, fkiRows)
 	if err != nil {
 		return nil, 0, err
 	}
-	fkiRows = dropDuplicates(fkiRows, dup)
 
 	itoryRows, err := fetch(ctx, c.itoryDB, itorySource, filter)
 	if err != nil {
