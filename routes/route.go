@@ -85,7 +85,7 @@ func NewRoute(db, fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	userLogRepository := userLogRepository.NewUserLogRepository(db)
 	transactionLogRepository := transactionLogRepository.NewTransactionLogRepository(db)
 	entryProductRepository := entryProductRepository.NewEntryProductRepository(fkiDB, itoryDB)
-	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(db)
+	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(fkiDB)
 	pabeanRepository := pabeanRepository.NewPabeanRepository(db)
 	itemGroupRepository := itemGroupRepository.NewItemGroupRepository(db)
 	productRepository := productRepository.NewProductRepository(db)

@@ -22,7 +22,6 @@ func NewExpenditureProductService(expenditureProductRepo *expenditureProductRepo
 // ==========================
 
 // GetReport retrieves expenditure products with filters and pagination
-func (s *ExpenditureProductService) GetReport(filter expenditureProductRepository.GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
-	ctx := context.Background()
+func (s *ExpenditureProductService) GetReport(ctx context.Context, filter expenditureProductRepository.GetReportFilter) ([]model.ExpenditureProduct, int64, error) {
 	return s.expenditureProductRepo.GetReport(ctx, filter)
 }

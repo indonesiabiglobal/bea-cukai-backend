@@ -60,7 +60,7 @@ func (c *ExpenditureProductController) GetReport(ctx *gin.Context) {
 		Limit:        limit,
 		IsExport:     false,
 	}
-	res, totalCount, err := c.ExpenditureProductService.GetReport(filter)
+	res, totalCount, err := c.ExpenditureProductService.GetReport(ctx.Request.Context(), filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get expenditure products", err, gin.H{
 			"from":         from.Format("2006-01-02"),
@@ -144,7 +144,7 @@ func (c *ExpenditureProductController) ExportExcel(ctx *gin.Context) {
 		IsExport:     true,
 	}
 
-	res, _, err := c.ExpenditureProductService.GetReport(filter)
+	res, _, err := c.ExpenditureProductService.GetReport(ctx.Request.Context(), filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get expenditure products for export", err, gin.H{
 			"from":         from.Format("2006-01-02"),
