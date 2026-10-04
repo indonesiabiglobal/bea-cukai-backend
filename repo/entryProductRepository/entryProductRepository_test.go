@@ -1,6 +1,7 @@
 package entryProductRepository
 
 import (
+	"Bea-Cukai/model"
 	"context"
 	"regexp"
 	"strings"
@@ -245,6 +246,48 @@ func TestMergeAndPage_HugePageLimitNoPanic(t *testing.T) {
 	}
 	if res, _ := mergeAndPage(rows, GetReportFilter{Page: 1, Limit: maxInt}); len(res) != 3 {
 		t.Errorf("page 1, limit max: want 3 rows, got %d", len(res))
+	}
+}
+
+// Urutan: tgl_pabean, no_pabean, trans_no (DESC di layar, ASC saat export), lalu seq_num selalu ASC
+func TestMergeAndPage_SortsByDateNoPabeanTransNoThenSeq(t *testing.T) {
+	row := func(no, trans string, seq int) entryRow {
+		r := entryRow{SeqNum: seq}
+		r.TglPabean, r.NoPabean, r.TransNo = mustParseDate("2026-09-01"), no, trans
+		return r
+	}
+	key := func(res []model.EntryProduct) string {
+		var s []string
+		for _, r := range res {
+			s = append(s, r.NoPabean+"/"+r.TransNo)
+		}
+		return strings.Join(s, " ")
+	}
+	in := func() []entryRow {
+		return []entryRow{row("000100", "T2", 2), row("000200", "T1", 1), row("000100", "T2", 1), row("000100", "T3", 1)}
+	}
+
+	res, _ := mergeAndPage(in(), GetReportFilter{})
+	if got, want := key(res), "000200/T1 000100/T3 000100/T2 000100/T2"; got != want {
+		t.Errorf("layar: got %q, want %q", got, want)
+	}
+	res, _ = mergeAndPage(in(), GetReportFilter{IsExport: true})
+	if got, want := key(res), "000100/T2 000100/T2 000100/T3 000200/T1"; got != want {
+		t.Errorf("export: got %q, want %q", got, want)
+	}
+	// baris T2 seq 1 harus sebelum seq 2 di kedua arah
+	for _, exp := range []bool{false, true} {
+		rows := in()
+		_, _ = mergeAndPage(rows, GetReportFilter{IsExport: exp})
+		var seqs []int
+		for _, r := range rows {
+			if r.TransNo == "T2" {
+				seqs = append(seqs, r.SeqNum)
+			}
+		}
+		if len(seqs) != 2 || seqs[0] != 1 || seqs[1] != 2 {
+			t.Errorf("export=%v: seq T2 = %v, want [1 2]", exp, seqs)
+		}
 	}
 }
 

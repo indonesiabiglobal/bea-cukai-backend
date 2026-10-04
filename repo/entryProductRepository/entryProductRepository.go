@@ -147,7 +147,7 @@ func buildQuery(src entrySource, filter GetReportFilter) (string, []any) {
 	return query, args
 }
 
-// entryRow carries seq_num only for SQL ordering; the API returns model.EntryProduct.
+// entryRow carries seq_num only for ordering; the API returns model.EntryProduct.
 type entryRow struct {
 	model.EntryProduct
 	SeqNum int
@@ -160,18 +160,23 @@ func fetch(ctx context.Context, db *gorm.DB, src entrySource, filter GetReportFi
 	return rows, err
 }
 
-// mergeAndPage sorts the combined rows by tgl_pabean (ASC for export, DESC otherwise),
-// then trans_no DESC; the stable sort keeps each source's seq_num order within a transaction.
+// mergeAndPage sorts the combined rows by tgl_pabean, no_pabean, trans_no (ASC for export, DESC otherwise),
+// then seq_num ASC so a document's lines keep their order.
 func mergeAndPage(rows []entryRow, filter GetReportFilter) ([]model.EntryProduct, int64) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
-		if !a.TglPabean.Equal(b.TglPabean) {
-			if filter.IsExport {
-				return a.TglPabean.Before(b.TglPabean)
-			}
-			return a.TglPabean.After(b.TglPabean)
+		if filter.IsExport {
+			a, b = b, a
 		}
-		return a.TransNo > b.TransNo
+		switch {
+		case !a.TglPabean.Equal(b.TglPabean):
+			return a.TglPabean.After(b.TglPabean)
+		case a.NoPabean != b.NoPabean:
+			return a.NoPabean > b.NoPabean
+		case a.TransNo != b.TransNo:
+			return a.TransNo > b.TransNo
+		}
+		return rows[i].SeqNum < rows[j].SeqNum
 	})
 
 	total := int64(len(rows))

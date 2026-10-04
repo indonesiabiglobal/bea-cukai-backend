@@ -68,7 +68,7 @@ func TestGetReport_PagesInSQLAndNormalizesItemCode(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM (\nSELECT")).
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(25))
-	mock.ExpectQuery(regexp.QuoteMeta("ORDER BY tgl_pabean DESC, no_pabean DESC, trans_no DESC, item_name ASC, dlv_qty ASC\nLIMIT ? OFFSET ?")).
+	mock.ExpectQuery(regexp.QuoteMeta("ORDER BY tgl_pabean DESC, no_pabean DESC, invoice_no DESC, head.trans_no DESC, det.seq_num ASC\nLIMIT ? OFFSET ?")).
 		WithArgs("2026-09-01", "2026-09-30", 10, 10).
 		WillReturnRows(sqlmock.NewRows([]string{"trans_no", "item_code"}).AddRow("INV-1", "1ABC").AddRow("INV-2", "1"))
 
@@ -107,7 +107,7 @@ func TestGetReport_HugePageSkipsQueryWithoutOverflow(t *testing.T) {
 func TestGetReport_ExportSkipsCountAndProductCodeExpandsIn(t *testing.T) {
 	db, mock := newMockMySQL(t)
 	repo := NewExpenditureProductRepository(db)
-	mock.ExpectQuery(regexp.QuoteMeta("det.item_code IN (?,?)\nORDER BY tgl_pabean ASC")).
+	mock.ExpectQuery(regexp.QuoteMeta("det.item_code IN (?,?)\nORDER BY tgl_pabean ASC, no_pabean ASC, invoice_no ASC, head.trans_no ASC, det.seq_num ASC")).
 		WithArgs("2026-09-01", "2026-09-30", "1ABC", "ABC").
 		WillReturnRows(sqlmock.NewRows([]string{"trans_no"}))
 

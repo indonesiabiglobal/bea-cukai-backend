@@ -121,8 +121,8 @@ func (c *ExpenditureProductRepository) GetReport(ctx context.Context, filter Get
 	if filter.IsExport {
 		dir = "ASC"
 	}
-	// ponytail: the key isn't unique (same item/qty twice on one invoice can tie); add seq_num if paging ever shifts.
-	query := base + "\nORDER BY tgl_pabean " + dir + ", no_pabean DESC, trans_no DESC, item_name ASC, dlv_qty ASC"
+	// trans_no (= invoice_no) is the column shown; head.trans_no + seq_num is the detail PK, so paging is stable.
+	query := base + "\nORDER BY tgl_pabean " + dir + ", no_pabean " + dir + ", invoice_no " + dir + ", head.trans_no " + dir + ", det.seq_num ASC"
 
 	// Apply pagination only if both page and limit are provided (> 0); only then is a separate COUNT needed.
 	// Compared via division so a huge page/limit from the query string can't overflow.
