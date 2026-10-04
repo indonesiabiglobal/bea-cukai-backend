@@ -38,7 +38,7 @@ func (r *WipPositionReportRepository) getMaxOpnameDate(ctx context.Context, befo
 
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_opname_head").
-		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
+		Select("COALESCE(MAX(trans_date)::text, '2000-01-01') as trans_date").
 		Where("trans_date <= ? AND item_group = 'WIP'", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
@@ -77,67 +77,67 @@ func (r *WipPositionReportRepository) GetReport(ctx context.Context, filter GetR
 	args := []interface{}{}
 
 	if filter.ItemCode != "" {
-		whereConditions += " AND a.item_code LIKE ?"
+		whereConditions += " AND a.item_code ILIKE ?"
 		args = append(args, "%"+filter.ItemCode+"%")
 	}
 
 	if filter.ItemName != "" {
-		whereConditions += " AND a.item_name LIKE ?"
+		whereConditions += " AND a.item_name ILIKE ?"
 		args = append(args, "%"+filter.ItemName+"%")
 	}
 
 	// Complex SQL query equivalent to the PHP version
 	baseQuery := fmt.Sprintf(`
 		SELECT a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group, '' as location_code,
-			IFNULL(b.awal, IFNULL(x.awal, 0)) as awal,
-			IFNULL(c.masuk, 0) as masuk,
-			IFNULL(d.keluar, 0) as keluar,
+			COALESCE(b.awal, COALESCE(x.awal, 0)) as awal,
+			COALESCE(c.masuk, 0) as masuk,
+			COALESCE(d.keluar, 0) as keluar,
 			0 as peny,
 			0 as akhir,
-			IFNULL(f.opname, IFNULL(y.opname, 0)) as opname
+			COALESCE(f.opname, COALESCE(y.opname, 0)) as opname
 		FROM ms_item a
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as awal
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as awal
 			FROM tr_inv_opname_head a 
 			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
-		) as b ON a.item_code = b.item_code
+			GROUP BY UPPER(b.item_code)
+		) as b ON UPPER(a.item_code) = b.item_code
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as awal
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as awal
 			FROM tr_inv_opname_head a 
 			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
-		) as x ON a.item_code = x.item_code
+			GROUP BY UPPER(b.item_code)
+		) as x ON UPPER(a.item_code) = x.item_code
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as masuk
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as masuk
 			FROM tr_inv_movein_head a 
 			INNER JOIN tr_inv_movein_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date BETWEEN ? AND ?
-			GROUP BY b.item_code
-		) as c ON a.item_code = c.item_code
+			GROUP BY UPPER(b.item_code)
+		) as c ON UPPER(a.item_code) = c.item_code
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as keluar
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as keluar
 			FROM tr_inv_moveout_head a 
 			INNER JOIN tr_inv_moveout_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date BETWEEN ? AND ?
-			GROUP BY b.item_code
-		) as d ON a.item_code = d.item_code
+			GROUP BY UPPER(b.item_code)
+		) as d ON UPPER(a.item_code) = d.item_code
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as opname
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as opname
 			FROM tr_inv_opname_head a 
 			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
-		) as f ON a.item_code = f.item_code
+			GROUP BY UPPER(b.item_code)
+		) as f ON UPPER(a.item_code) = f.item_code
 		LEFT JOIN (
-			SELECT b.item_code, SUM(b.qty) as opname
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) as opname
 			FROM tr_inv_opname_head a 
 			INNER JOIN tr_inv_opname_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
-		) as y ON a.item_code = y.item_code
+			GROUP BY UPPER(b.item_code)
+		) as y ON UPPER(a.item_code) = y.item_code
 		WHERE a.item_group = 'WIP' %s
 	`, whereConditions)
 
@@ -163,7 +163,8 @@ func (r *WipPositionReportRepository) GetReport(ctx context.Context, filter GetR
 	}
 
 	// Add LIMIT and OFFSET for pagination
-	finalQuery := fmt.Sprintf("SELECT * FROM (%s) as subquery WHERE subquery.awal <> 0", baseQuery)
+	// Explicit order: MySQL returned ms_item order (case-insensitive item_code, i.e. uppercase weights); Postgres needs it for stable paging.
+	finalQuery := fmt.Sprintf(`SELECT * FROM (%s) as subquery WHERE subquery.awal <> 0 ORDER BY UPPER(item_code) COLLATE "C", item_code`, baseQuery)
 	if filter.Limit > 0 {
 		offset := 0
 		if filter.Page > 1 {

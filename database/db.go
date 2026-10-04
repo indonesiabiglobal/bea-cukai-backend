@@ -9,10 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-func ConnectDB() (*gorm.DB, error) {
-	return connectMySQL("DB_")
-}
-
 // ConnectFKI connects to the live FKI database (MySQL).
 func ConnectFKI() (*gorm.DB, error) {
 	return connectMySQL("FKI_DB_")

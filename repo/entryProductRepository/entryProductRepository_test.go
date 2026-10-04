@@ -261,3 +261,38 @@ func TestLocalDate_SameDayAcrossSourcesSortsByTransNo(t *testing.T) {
 		t.Errorf("same day must tie on date and order by trans_no DESC, got %v / %v", res[0], res[1])
 	}
 }
+
+// QtyByTransDate memfilter trans_date (FKI) / in_date (Itory) dan menjumlah rcv_qty per item,
+// dengan kode item dinormalisasi seperti perbandingan MySQL (case-insensitive, spasi diabaikan).
+func TestQtyByTransDate_SumsPerItemOnTransDate(t *testing.T) {
+	fkiDB, fkiMock := newMockMySQL(t)
+	itoryDB, itoryMock := newMockPostgres(t)
+	repo := NewEntryProductRepository(fkiDB, itoryDB)
+	d1 := mustParseDate("2026-09-01")
+
+	fkiMock.ExpectQuery(regexp.QuoteMeta("AND trans_date BETWEEN ? AND ?\nORDER BY")).
+		WithArgs("2026-09-01", "2026-09-30").
+		WillReturnRows(sqlmock.NewRows(entryCols).
+			AddRow("BC 2.3", "F1", d1, "FKI-001", "box01", "Box", "1.5", "PCS", 1).
+			AddRow("BC 2.3", "F1", d1, "FKI-001", "INK1", "Ink", "2", "KG", 2))
+	itoryMock.ExpectQuery(regexp.QuoteMeta("string_to_array")).
+		WillReturnRows(sqlmock.NewRows([]string{"ref_key", "bc_no", "bc_date", "vendor_code"}))
+	itoryMock.ExpectQuery(regexp.QuoteMeta("AND in_date BETWEEN $1 AND $2\nORDER BY")).
+		WithArgs("2026-09-01", "2026-09-30").
+		WillReturnRows(sqlmock.NewRows(entryCols).
+			AddRow("BC 2.3", "I1", d1, "ITR-001", "BOX01 ", "Box", "3", "PCS", 1))
+
+	qty, err := repo.QtyByTransDate(context.Background(), d1, mustParseDate("2026-09-30"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(qty) != 2 || qty["BOX01"].String() != "4.5" || qty["INK1"].String() != "2" {
+		t.Errorf("got %v", qty)
+	}
+	if err := fkiMock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+	if err := itoryMock.ExpectationsWereMet(); err != nil {
+		t.Error(err)
+	}
+}

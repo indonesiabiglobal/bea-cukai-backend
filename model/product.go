@@ -36,6 +36,12 @@ func (b *MySQLBit) Scan(value interface{}) error {
 		} else {
 			*b = 0
 		}
+	case string:
+		// Itory (Postgres) stores these flags as varchar '1' / NULL
+		*b = 0
+		if v == "1" {
+			*b = 1
+		}
 	default:
 		return fmt.Errorf("cannot scan %T into MySQLBit", value)
 	}

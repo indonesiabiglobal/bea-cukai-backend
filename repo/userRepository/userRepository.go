@@ -34,7 +34,7 @@ func (u *UserRepository) CreateUser(user model.UserRequest) (model.User, error) 
 // LoginUser implements UserRepository
 func (u *UserRepository) LoginUser(userLogin model.UserLoginRequest) (model.User, error) {
 	user := model.User{}
-	err := u.db.Where("username = ?", userLogin.Username).First(&user).Error
+	err := u.db.Where("LOWER(username) = LOWER(?)", userLogin.Username).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
@@ -80,7 +80,7 @@ func (u *UserRepository) DeleteUser(id string) error {
 // GetUserByUsername - get user by username (username)
 func (u *UserRepository) GetUserByUsername(username string) (model.User, error) {
 	var user model.User
-	err := u.db.Where("username = ?", username).First(&user).Error
+	err := u.db.Where("LOWER(username) = LOWER(?)", username).First(&user).Error
 	if err != nil {
 		return model.User{}, err
 	}
@@ -112,10 +112,10 @@ func (u *UserRepository) GetAll(req model.UserListRequest) ([]model.User, int64,
 
 	// Apply filters
 	if req.Id != "" {
-		query = query.Where("id LIKE ?", "%"+req.Id+"%")
+		query = query.Where("id ILIKE ?", "%"+req.Id+"%")
 	}
 	if req.Username != "" {
-		query = query.Where("username LIKE ?", "%"+req.Username+"%")
+		query = query.Where("username ILIKE ?", "%"+req.Username+"%")
 	}
 	if req.Level != "" {
 		query = query.Where("level = ?", req.Level)

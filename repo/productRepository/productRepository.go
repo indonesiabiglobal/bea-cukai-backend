@@ -30,10 +30,10 @@ func (r *productRepository) GetAll(req model.ProductRequest) ([]model.Product, i
 
 	// Apply filters
 	if req.ItemCode != "" {
-		query = query.Where("item_code LIKE ?", "%"+req.ItemCode+"%")
+		query = query.Where("item_code ILIKE ?", "%"+req.ItemCode+"%")
 	}
 	if req.ItemName != "" {
-		query = query.Where("item_name LIKE ?", "%"+req.ItemName+"%")
+		query = query.Where("item_name ILIKE ?", "%"+req.ItemName+"%")
 	}
 	if req.ItemGroup != "" {
 		query = query.Where("item_group = ?", req.ItemGroup)

@@ -79,22 +79,22 @@ func corsConfig() cors.Config {
 	}
 }
 
-func NewRoute(db, fkiDB, itoryDB *gorm.DB) *gin.Engine {
+func NewRoute(fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	// Repositories
-	userRepository := userRepository.NewUserRepository(db)
-	userLogRepository := userLogRepository.NewUserLogRepository(db)
-	transactionLogRepository := transactionLogRepository.NewTransactionLogRepository(db)
+	userRepository := userRepository.NewUserRepository(itoryDB)
+	userLogRepository := userLogRepository.NewUserLogRepository(itoryDB)
+	transactionLogRepository := transactionLogRepository.NewTransactionLogRepository(itoryDB)
 	entryProductRepository := entryProductRepository.NewEntryProductRepository(fkiDB, itoryDB)
 	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(fkiDB)
-	pabeanRepository := pabeanRepository.NewPabeanRepository(db)
-	itemGroupRepository := itemGroupRepository.NewItemGroupRepository(db)
-	productRepository := productRepository.NewProductRepository(db)
-	wipPositionReportRepository := wipPositionReportRepository.NewWipPositionReportRepository(db)
-	rawMaterialReportRepository := rawMaterialReportRepository.NewRawMaterialReportRepository(db)
-	finishedProductReportRepository := finishedProductReportRepository.NewFinishedProductReportRepository(db)
-	machineToolReportRepository := machineToolReportRepository.NewMachineToolReportRepository(db)
-	rejectScrapReportRepository := rejectScrapReportRepository.NewRejectScrapReportRepository(db)
-	auxiliaryMaterialReportRepository := auxiliaryMaterialReportRepository.NewAuxiliaryMaterialReportRepository(db)
+	pabeanRepository := pabeanRepository.NewPabeanRepository(itoryDB)
+	itemGroupRepository := itemGroupRepository.NewItemGroupRepository(itoryDB)
+	productRepository := productRepository.NewProductRepository(itoryDB)
+	wipPositionReportRepository := wipPositionReportRepository.NewWipPositionReportRepository(itoryDB)
+	rawMaterialReportRepository := rawMaterialReportRepository.NewRawMaterialReportRepository(itoryDB)
+	finishedProductReportRepository := finishedProductReportRepository.NewFinishedProductReportRepository(itoryDB)
+	machineToolReportRepository := machineToolReportRepository.NewMachineToolReportRepository(itoryDB)
+	rejectScrapReportRepository := rejectScrapReportRepository.NewRejectScrapReportRepository(itoryDB)
+	auxiliaryMaterialReportRepository := auxiliaryMaterialReportRepository.NewAuxiliaryMaterialReportRepository(itoryDB, entryProductRepository.QtyByTransDate)
 
 	// Services
 	userService := userService.NewUserService(userRepository, userLogRepository)

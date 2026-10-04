@@ -16,7 +16,7 @@ type UserLog struct {
 
 // TableName specifies the table name for GORM
 func (UserLog) TableName() string {
-	return "user_log"
+	return "bc_user_log"
 }
 
 type UserLogRequest struct {

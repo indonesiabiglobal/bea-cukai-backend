@@ -14,7 +14,7 @@ type User struct {
 
 // TableName specifies the table name for GORM
 func (User) TableName() string {
-	return "user"
+	return "bc_user"
 }
 
 type UserRequest struct {

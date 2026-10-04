@@ -54,7 +54,7 @@ func (r *FinishedProductReportRepository) getMaxProductHarianDate(ctx context.Co
 
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_produk_harian_head").
-		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
+		Select("COALESCE(MAX(trans_date)::text, '2000-01-01') as trans_date").
 		Where("trans_date <= ?", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
@@ -81,8 +81,8 @@ func (r *FinishedProductReportRepository) getAllProductOpnameDates(ctx context.C
 
 	err := r.db.WithContext(ctx).Raw(`
 		SELECT
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date < ? THEN trans_date END), '2000-01-01') AS tgl_awal_gudang2,
-			IFNULL(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir_gudang2
+			COALESCE(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date < ? THEN trans_date END)::text, '2000-01-01') AS tgl_awal_gudang2,
+			COALESCE(MAX(CASE WHEN opname_gudang2 = 1 AND trans_date <= ? THEN trans_date END)::text, '2000-01-01') AS tgl_akhir_gudang2
 		FROM tr_inv_produk_harian_head
 		WHERE trans_date <= ?
 	`, fromDate.Format("2006-01-02"),
@@ -115,111 +115,112 @@ func buildBaseQuery(dates productOpnameDates, filter GetReportFilter) (string, [
 	extraArgs := []any{}
 
 	if filter.ItemCode != "" {
-		whereConditions += " AND a.item_code LIKE ?"
+		whereConditions += " AND a.item_code ILIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemCode+"%")
 	}
 	if filter.ItemName != "" {
-		whereConditions += " AND a.item_name LIKE ?"
+		whereConditions += " AND a.item_name ILIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemName+"%")
 	}
 
-	awalExpr := "(IFNULL(b.awal, 0) + IFNULL(masuk_awal.masuk, 0) - IFNULL(keluar_awal.keluar, 0) + IFNULL(peny_awal.peny, 0))"
+	awalExpr := "(COALESCE(b.awal, 0) + COALESCE(masuk_awal.masuk, 0) - COALESCE(keluar_awal.keluar, 0) + COALESCE(peny_awal.peny, 0))"
 
-	akhirExpr := fmt.Sprintf("%s + IFNULL(c.masuk, 0) - IFNULL(d.keluar, 0) + IFNULL(e.peny, 0)", awalExpr)
+	akhirExpr := fmt.Sprintf("%s + COALESCE(c.masuk, 0) - COALESCE(d.keluar, 0) + COALESCE(e.peny, 0)", awalExpr)
 
-	opnameExpr := "IFNULL(f.opname, 0)"
+	opnameExpr := "COALESCE(f.opname, 0)"
 	if dates.TglAkhirGudang2.Format("2006-01-02") != filter.To.Format("2006-01-02") {
 		opnameExpr = akhirExpr
 	}
 
 	query := fmt.Sprintf(`
 		WITH b AS (
-			SELECT det.item_code,
+			SELECT UPPER(det.item_code) AS item_code,
 				SUM(
 					CASE WHEN head.opname_gudang2 = 1 THEN det.wh2 ELSE 0 END
 				) AS awal
 			FROM tr_inv_produk_harian_head head
 			INNER JOIN tr_inv_produk_harian_det det ON head.trans_no = det.trans_no
 			WHERE (head.opname_gudang2 = 1 AND head.trans_date = ?)
-			GROUP BY det.item_code
+			GROUP BY UPPER(det.item_code)
 		),
 		masuk_awal AS (
-			SELECT no_produk, SUM(isi_palet) AS masuk
+			SELECT UPPER(no_produk) AS no_produk, SUM(isi_palet) AS masuk
 			FROM tr_produk_in_head
 			WHERE tgl_proses > ? AND tgl_proses < ?
-			GROUP BY no_produk
+			GROUP BY UPPER(no_produk)
 		),
 		keluar_awal AS (
-			SELECT b.no_produk, SUM(isi_palet) AS keluar
+			SELECT UPPER(b.no_produk) AS no_produk, SUM(isi_palet) AS keluar
 			FROM tr_export_head a
 			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
 			WHERE a.tgl_ekspor > ? AND a.tgl_ekspor < ?
-			GROUP BY b.no_produk
+			GROUP BY UPPER(b.no_produk)
 		),
 		peny_awal AS (
-			SELECT b.item_code, SUM(qty) AS peny
+			SELECT UPPER(b.item_code) AS item_code, SUM(qty) AS peny
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
-			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			LEFT JOIN ms_item c ON UPPER(b.item_code) = UPPER(c.item_code)
 			WHERE a.trans_date > ? AND a.trans_date < ? AND c.item_group = 'PRODUCT'
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		c AS (
-			SELECT no_produk, SUM(isi_palet) AS masuk
+			SELECT UPPER(no_produk) AS no_produk, SUM(isi_palet) AS masuk
 			FROM tr_produk_in_head
 			WHERE tgl_proses >= ? AND tgl_proses <= ?
-			GROUP BY no_produk
+			GROUP BY UPPER(no_produk)
 		),
 		d AS (
-			SELECT b.no_produk, SUM(isi_palet) AS keluar
+			SELECT UPPER(b.no_produk) AS no_produk, SUM(isi_palet) AS keluar
 			FROM tr_export_head a
 			INNER JOIN tr_export_det b ON a.trans_no = b.trans_no
 			WHERE a.tgl_ekspor >= ? AND a.tgl_ekspor <= ?
-			GROUP BY b.no_produk
+			GROUP BY UPPER(b.no_produk)
 		),
 		e AS (
-			SELECT b.item_code, SUM(qty) AS peny
+			SELECT UPPER(b.item_code) AS item_code, SUM(qty) AS peny
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
-			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			LEFT JOIN ms_item c ON UPPER(b.item_code) = UPPER(c.item_code)
 			WHERE a.trans_date >= ? AND a.trans_date <= ? AND c.item_group = 'PRODUCT'
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		f AS (
-			SELECT det.item_code,
+			SELECT UPPER(det.item_code) AS item_code,
 				SUM(
 					CASE WHEN head.opname_gudang2 = 1 THEN det.wh2 ELSE 0 END
 				) AS opname
 			FROM tr_inv_produk_harian_head head
 			INNER JOIN tr_inv_produk_harian_det det ON head.trans_no = det.trans_no
 			WHERE (head.opname_gudang2 = 1 AND head.trans_date = ?)
-			GROUP BY det.item_code
+			GROUP BY UPPER(det.item_code)
 		),
 		a AS (
 			SELECT
 				a.item_code, a.item_name, a.unit_code, a.item_type_code, a.item_group,
 				'' AS location_code,
 				%s AS awal,
-				IFNULL(c.masuk, 0) AS masuk,
-				IFNULL(d.keluar, 0) AS keluar,
-				IFNULL(e.peny, 0) AS peny,
+				COALESCE(c.masuk, 0) AS masuk,
+				COALESCE(d.keluar, 0) AS keluar,
+				COALESCE(e.peny, 0) AS peny,
 				%s AS akhir,
 				%s AS opname,
 				(%s) - (%s) AS selisih
 			FROM ms_item a
-			LEFT JOIN b ON a.item_code = b.item_code
-			LEFT JOIN masuk_awal ON a.item_code = masuk_awal.no_produk
-			LEFT JOIN keluar_awal ON a.item_code = keluar_awal.no_produk
-			LEFT JOIN peny_awal ON a.item_code = peny_awal.item_code
-			LEFT JOIN c ON a.item_code = c.no_produk
-			LEFT JOIN d ON a.item_code = d.no_produk
-			LEFT JOIN e ON a.item_code = e.item_code
-			LEFT JOIN f ON a.item_code = f.item_code
+			LEFT JOIN b ON UPPER(a.item_code) = b.item_code
+			LEFT JOIN masuk_awal ON UPPER(a.item_code) = masuk_awal.no_produk
+			LEFT JOIN keluar_awal ON UPPER(a.item_code) = keluar_awal.no_produk
+			LEFT JOIN peny_awal ON UPPER(a.item_code) = peny_awal.item_code
+			LEFT JOIN c ON UPPER(a.item_code) = c.no_produk
+			LEFT JOIN d ON UPPER(a.item_code) = d.no_produk
+			LEFT JOIN e ON UPPER(a.item_code) = e.item_code
+			LEFT JOIN f ON UPPER(a.item_code) = f.item_code
 			WHERE a.item_group = 'PRODUCT' %s
 		)
 		SELECT a.*
 		FROM a
 		WHERE a.awal <> 0 OR a.opname <> 0 OR a.keluar <> 0 OR a.peny <> 0 OR akhir <> 0
+		ORDER BY UPPER(item_code) COLLATE "C", item_code
 	`, awalExpr, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
 
 	baseArgs := []any{
@@ -273,6 +274,7 @@ func (r *FinishedProductReportRepository) GetReport(ctx context.Context, filter 
 		paginatedQuery := fmt.Sprintf(`
 			SELECT inner_q.*, COUNT(*) OVER() AS _total_count
 			FROM (%s) AS inner_q
+			ORDER BY UPPER(item_code) COLLATE "C", item_code
 			LIMIT %d OFFSET %d
 		`, baseQuery, filter.Limit, offset)
 

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	sqlmock "github.com/DATA-DOG/go-sqlmock"
-	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -28,10 +28,7 @@ func newMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 	if err != nil {
 		t.Fatalf("sqlmock.New: %v", err)
 	}
-	gormDB, err := gorm.Open(mysql.New(mysql.Config{
-		Conn:                      db,
-		SkipInitializeWithVersion: true,
-	}), &gorm.Config{
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{Conn: db}), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -44,7 +41,7 @@ func newMockDB(t *testing.T) (*gorm.DB, sqlmock.Sqlmock) {
 // buildBaseQuery — pure unit tests, tidak butuh DB
 // ============================================================
 
-// Test 1: saat tglInvAkhir == filter.To, opname harus pakai IFNULL(f.opname, 0)
+// Test 1: saat tglInvAkhir == filter.To, opname harus pakai COALESCE(f.opname, 0)
 func TestBuildBaseQuery_OpnameUsesF_WhenAkhirEqualsTo(t *testing.T) {
 	tglInvAwal := mustParseDate("2024-01-01")
 	tglInvAkhir := mustParseDate("2024-01-31")
@@ -55,8 +52,11 @@ func TestBuildBaseQuery_OpnameUsesF_WhenAkhirEqualsTo(t *testing.T) {
 
 	query, _ := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
 
-	if !strings.Contains(query, "IFNULL(f.opname, 0) AS opname") {
-		t.Error("opname harus IFNULL(f.opname, 0) ketika tglInvAkhir == filter.To")
+	if !strings.Contains(query, "COALESCE(f.opname, 0) AS opname") {
+		t.Error("opname harus COALESCE(f.opname, 0) ketika tglInvAkhir == filter.To")
+	}
+	if strings.Contains(query, "IFNULL") {
+		t.Error("IFNULL tidak ada di Postgres")
 	}
 }
 
@@ -71,24 +71,20 @@ func TestBuildBaseQuery_OpnameUsesAkhir_WhenAkhirNotEqualsTo(t *testing.T) {
 
 	query, _ := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
 
-	if strings.Contains(query, "IFNULL(f.opname, 0) AS opname") {
-		t.Error("opname TIDAK boleh pakai IFNULL(f.opname, 0) ketika tglInvAkhir != filter.To")
+	if strings.Contains(query, "COALESCE(f.opname, 0) AS opname") {
+		t.Error("opname TIDAK boleh pakai COALESCE(f.opname, 0) ketika tglInvAkhir != filter.To")
 	}
 }
 
-// Test 3: jumlah base args harus tepat 16 (tanpa filter item_code/item_name)
+// Test 3: jumlah base args harus tepat 18 (tanpa filter item_code/item_name)
 func TestBuildBaseQuery_ArgsCount_NoFilter(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-01")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	_, args := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
 		From: mustParseDate("2024-01-15"),
 		To:   mustParseDate("2024-01-31"),
-	}
+	})
 
-	_, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	// b(1)+c(2)+e(2)+f(1)+g(2)+out_after(2)+in_after(2)+movein_after(2)+peny_after(2) = 16
-	const wantCount = 16
+	// b(1)+c(2)+e(2)+f(1)+g(2)+keluar(2)+keluar_awal(2)+masuk_awal(2)+movein_awal(2)+peny_after_opname(2) = 18
+	const wantCount = 18
 	if len(args) != wantCount {
 		t.Errorf("jumlah args: want %d, got %d", wantCount, len(args))
 	}
@@ -96,18 +92,14 @@ func TestBuildBaseQuery_ArgsCount_NoFilter(t *testing.T) {
 
 // Test 4: filter item_code dan item_name menambah 2 args ekstra
 func TestBuildBaseQuery_ArgsCount_WithBothFilters(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-01")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	_, args := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
 		From:     mustParseDate("2024-01-15"),
 		To:       mustParseDate("2024-01-31"),
 		ItemCode: "MAT001",
 		ItemName: "Bahan A",
-	}
+	})
 
-	_, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	const wantCount = 18 // 16 base + 2 filter
+	const wantCount = 20 // 18 base + 2 filter
 	if len(args) != wantCount {
 		t.Errorf("jumlah args dengan filter: want %d, got %d", wantCount, len(args))
 	}
@@ -116,34 +108,23 @@ func TestBuildBaseQuery_ArgsCount_WithBothFilters(t *testing.T) {
 // Test 5: urutan args harus persis sesuai urutan ? di CTE
 // Ini adalah test paling kritis — urutan args salah = data salah
 func TestBuildBaseQuery_ArgsOrder(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-01")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	_, args := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
 		From: mustParseDate("2024-01-15"),
 		To:   mustParseDate("2024-01-31"),
-	}
+	})
 
-	_, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	// afterStart = tglInvAwal+1 = "2024-01-02"
-	// afterEnd   = filter.From-1 = "2024-01-14"
+	// Rentang *_awal: trans_date > tglInvAwal AND trans_date < filter.From (eksklusif)
 	want := []string{
-		"2024-01-01", // [0]  b:              tglInvAwal
-		"2024-01-15", // [1]  c:              filter.From
-		"2024-01-31", // [2]  c:              filter.To
-		"2024-01-15", // [3]  e:              filter.From
-		"2024-01-31", // [4]  e:              filter.To
-		"2024-01-31", // [5]  f:              tglInvAkhir
-		"2024-01-15", // [6]  g:              filter.From
-		"2024-01-31", // [7]  g:              filter.To
-		"2024-01-02", // [8]  out_after start (tglInvAwal+1)
-		"2024-01-14", // [9]  out_after end   (filter.From-1)
-		"2024-01-02", // [10] in_after start
-		"2024-01-14", // [11] in_after end
-		"2024-01-02", // [12] movein_after start
-		"2024-01-14", // [13] movein_after end
-		"2024-01-02", // [14] peny_after start
-		"2024-01-14", // [15] peny_after end
+		"2024-01-01",               // [0]  b:           tglInvAwal
+		"2024-01-15", "2024-01-31", // [1-2]  c:         filter.From..To
+		"2024-01-15", "2024-01-31", // [3-4]  e:         filter.From..To
+		"2024-01-31",               // [5]  f:           tglInvAkhir
+		"2024-01-15", "2024-01-31", // [6-7]  g:         filter.From..To
+		"2024-01-15", "2024-01-31", // [8-9]  keluar:    filter.From..To
+		"2024-01-01", "2024-01-15", // [10-11] keluar_awal
+		"2024-01-01", "2024-01-15", // [12-13] masuk_awal
+		"2024-01-01", "2024-01-15", // [14-15] movein_awal
+		"2024-01-01", "2024-01-15", // [16-17] peny_after_opname
 	}
 
 	if len(args) != len(want) {
@@ -160,111 +141,69 @@ func TestBuildBaseQuery_ArgsOrder(t *testing.T) {
 	}
 }
 
-// Test 6: tanggal after_opname dihitung +1/-1 hari dari tglInvAwal/filter.From
-func TestBuildBaseQuery_AfterOpnameDateBoundary(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-05")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+// Test 6: rentang *_awal memakai batas eksklusif > tglInvAwal dan < filter.From
+func TestBuildBaseQuery_AfterOpnameRangeIsExclusive(t *testing.T) {
+	query, _ := buildBaseQuery(mustParseDate("2024-01-05"), mustParseDate("2024-01-31"), GetReportFilter{
 		From: mustParseDate("2024-01-20"),
 		To:   mustParseDate("2024-01-31"),
-	}
+	})
 
-	_, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	// out_after: args[8] = tglInvAwal+1 = "2024-01-06", args[9] = filter.From-1 = "2024-01-19"
-	tests := []struct {
-		idx  int
-		want string
-		desc string
-	}{
-		{8, "2024-01-06", "out_after start (tglInvAwal+1)"},
-		{9, "2024-01-19", "out_after end   (filter.From-1)"},
-		{10, "2024-01-06", "in_after start"},
-		{11, "2024-01-19", "in_after end"},
-		{12, "2024-01-06", "movein_after start"},
-		{13, "2024-01-19", "movein_after end"},
-		{14, "2024-01-06", "peny_after start"},
-		{15, "2024-01-19", "peny_after end"},
-	}
-	for _, tc := range tests {
-		got, ok := args[tc.idx].(string)
-		if !ok {
-			t.Fatalf("args[%d] bukan string", tc.idx)
-		}
-		if got != tc.want {
-			t.Errorf("%s [args[%d]]: want %q, got %q", tc.desc, tc.idx, tc.want, got)
+	for _, want := range []string{
+		"rmhead.trans_date > ? AND rmhead.trans_date < ?",
+		"aphead.in_date > ? AND aphead.in_date < ?",
+		"moveinhead.trans_date > ? AND moveinhead.trans_date < ?",
+		"a.trans_date > ? AND a.trans_date < ?",
+	} {
+		if !strings.Contains(query, want) {
+			t.Errorf("query harus mengandung %q", want)
 		}
 	}
 }
 
-// Test 7: filter item_code ditambahkan sebagai LIKE pattern di akhir args
+// Test 7: filter item_code ditambahkan sebagai ILIKE pattern di akhir args
 func TestBuildBaseQuery_ItemCodeLikePattern(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-01")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	query, args := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
 		From:     mustParseDate("2024-01-15"),
 		To:       mustParseDate("2024-01-31"),
 		ItemCode: "MAT-001",
-	}
+	})
 
-	query, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	if !strings.Contains(query, "a.item_code LIKE ?") {
-		t.Error("query harus mengandung 'a.item_code LIKE ?'")
+	if !strings.Contains(query, "a.item_code ILIKE ?") {
+		t.Error("query harus mengandung 'a.item_code ILIKE ?' (case-insensitive seperti MySQL)")
 	}
-	lastArg, ok := args[len(args)-1].(string)
-	if !ok {
-		t.Fatal("arg item_code bukan string")
-	}
-	if lastArg != "%MAT-001%" {
+	if lastArg, _ := args[len(args)-1].(string); lastArg != "%MAT-001%" {
 		t.Errorf("item_code arg: want %%MAT-001%%, got %q", lastArg)
 	}
 }
 
-// Test 8: filter item_name ditambahkan sebagai LIKE pattern di akhir args
+// Test 8: filter item_name ditambahkan sebagai ILIKE pattern di akhir args
 func TestBuildBaseQuery_ItemNameLikePattern(t *testing.T) {
-	tglInvAwal := mustParseDate("2024-01-01")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	query, args := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
 		From:     mustParseDate("2024-01-15"),
 		To:       mustParseDate("2024-01-31"),
 		ItemName: "Bahan Baku",
-	}
+	})
 
-	query, args := buildBaseQuery(tglInvAwal, tglInvAkhir, filter)
-
-	if !strings.Contains(query, "a.item_name LIKE ?") {
-		t.Error("query harus mengandung 'a.item_name LIKE ?'")
+	if !strings.Contains(query, "a.item_name ILIKE ?") {
+		t.Error("query harus mengandung 'a.item_name ILIKE ?' (case-insensitive seperti MySQL)")
 	}
-	lastArg, ok := args[len(args)-1].(string)
-	if !ok {
-		t.Fatal("arg item_name bukan string")
-	}
-	if lastArg != "%Bahan Baku%" {
+	if lastArg, _ := args[len(args)-1].(string); lastArg != "%Bahan Baku%" {
 		t.Errorf("item_name arg: want %%Bahan Baku%%, got %q", lastArg)
 	}
 }
 
-// Test 9: saat tglInvAwal == filter.From, range after_opname kosong (start > end)
-// Ini valid: tidak ada transaksi untuk disesuaikan
+// Test 9: saat tglInvAwal == filter.From, rentang *_awal kosong (> X AND < X)
 func TestBuildBaseQuery_AfterOpnameEmptyRange_WhenAwalEqualsFrom(t *testing.T) {
 	sameDate := mustParseDate("2024-01-15")
-	tglInvAkhir := mustParseDate("2024-01-31")
-	filter := GetReportFilter{
+	_, args := buildBaseQuery(sameDate, mustParseDate("2024-01-31"), GetReportFilter{
 		From: sameDate,
 		To:   mustParseDate("2024-01-31"),
-	}
+	})
 
-	_, args := buildBaseQuery(sameDate, tglInvAkhir, filter)
-
-	afterStart := args[8].(string) // tglInvAwal+1 = "2024-01-16"
-	afterEnd := args[9].(string)   // filter.From-1 = "2024-01-14"
-
-	// afterStart > afterEnd → BETWEEN akan return 0 rows (behavior yang benar)
-	start, _ := time.Parse("2006-01-02", afterStart)
-	end, _ := time.Parse("2006-01-02", afterEnd)
-	if !start.After(end) {
-		t.Errorf("expected afterStart (%s) > afterEnd (%s) ketika tglInvAwal == filter.From", afterStart, afterEnd)
+	for i := 10; i < 18; i += 2 {
+		if args[i] != args[i+1] {
+			t.Errorf("args[%d..%d] = %v..%v, want sama (rentang eksklusif kosong)", i, i+1, args[i], args[i+1])
+		}
 	}
 }
 
@@ -307,7 +246,7 @@ func TestGetBothOpnameDates_ReturnsCorrectDates(t *testing.T) {
 	}
 }
 
-// Test 11: mengembalikan default "2000-01-01" saat tabel kosong (IFNULL menjamin ini)
+// Test 11: mengembalikan default "2000-01-01" saat tabel kosong (COALESCE menjamin ini)
 func TestGetBothOpnameDates_DefaultWhenNoData(t *testing.T) {
 	db, mock := newMockDB(t)
 	repo := NewRawMaterialReportRepository(db)
@@ -389,7 +328,7 @@ func TestGetMaxMaterialHarianDate_ReturnsMaxDate(t *testing.T) {
 	}
 }
 
-// Test 14: mengembalikan "2000-01-01" saat tidak ada data (nilai IFNULL)
+// Test 14: mengembalikan "2000-01-01" saat tidak ada data (nilai COALESCE)
 func TestGetMaxMaterialHarianDate_DefaultDate(t *testing.T) {
 	db, mock := newMockDB(t)
 	repo := NewRawMaterialReportRepository(db)
@@ -531,5 +470,20 @@ func TestGetReport_PageOffset(t *testing.T) {
 	}
 	if err = mock.ExpectationsWereMet(); err != nil {
 		t.Errorf("mock expectations: %v", err)
+	}
+}
+
+// Test 10: Itory menyimpan kode detail dengan huruf campur (mm313 vs MM313); MySQL dulu
+// mencocokkan case-insensitive, jadi semua GROUP BY / join kode harus lewat UPPER.
+func TestBuildBaseQuery_ItemCodesMatchCaseInsensitively(t *testing.T) {
+	query, _ := buildBaseQuery(mustParseDate("2024-01-01"), mustParseDate("2024-01-31"), GetReportFilter{
+		From: mustParseDate("2024-01-15"),
+		To:   mustParseDate("2024-01-31"),
+	})
+	for _, line := range strings.Split(query, "\n") {
+		line = strings.TrimSpace(line)
+		if (strings.HasPrefix(line, "GROUP BY") || strings.Contains(line, " ON ") && strings.Contains(line, "item_code")) && !strings.Contains(line, "UPPER(") {
+			t.Errorf("kode item dibandingkan case-sensitive: %q", line)
+		}
 	}
 }

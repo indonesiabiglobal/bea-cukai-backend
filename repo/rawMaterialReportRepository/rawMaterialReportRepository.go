@@ -38,7 +38,7 @@ func (r *RawMaterialReportRepository) getMaxMaterialHarianDate(ctx context.Conte
 
 	err := r.db.WithContext(ctx).
 		Table("tr_inv_material_harian_head").
-		Select("IFNULL(MAX(trans_date), '2000-01-01') as trans_date").
+		Select("COALESCE(MAX(trans_date)::text, '2000-01-01') as trans_date").
 		Where("trans_date <= ?", beforeDate.Format("2006-01-02")).
 		Scan(&result).Error
 
@@ -63,8 +63,8 @@ func (r *RawMaterialReportRepository) getBothOpnameDates(ctx context.Context, fr
 
 	err = r.db.WithContext(ctx).Raw(`
 		SELECT
-			IFNULL(MAX(CASE WHEN trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_awal,
-			IFNULL(MAX(CASE WHEN trans_date <= ? THEN trans_date END), '2000-01-01') AS tgl_akhir
+			COALESCE(MAX(CASE WHEN trans_date <= ? THEN trans_date END)::text, '2000-01-01') AS tgl_awal,
+			COALESCE(MAX(CASE WHEN trans_date <= ? THEN trans_date END)::text, '2000-01-01') AS tgl_akhir
 		FROM tr_inv_material_harian_head
 		WHERE trans_date <= ?
 	`, fromDate.Format("2006-01-02"), toDate.Format("2006-01-02"), toDate.Format("2006-01-02")).Scan(&result).Error
@@ -92,101 +92,101 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 	extraArgs := []interface{}{}
 
 	if filter.ItemCode != "" {
-		whereConditions += " AND a.item_code LIKE ?"
+		whereConditions += " AND a.item_code ILIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemCode+"%")
 	}
 	if filter.ItemName != "" {
-		whereConditions += " AND a.item_name LIKE ?"
+		whereConditions += " AND a.item_name ILIKE ?"
 		extraArgs = append(extraArgs, "%"+filter.ItemName+"%")
 	}
 
-	queryAwal := "(IFNULL(b.awal, 0) + (IFNULL(masuk_awal.trf_in, 0) + IFNULL(movein_awal.movein_after, 0)) - IFNULL(keluar_awal.trf_out, 0) + IFNULL(peny_after_opname.peny, 0))"
-	queryMasuk := "IFNULL(c.masuk, 0) + IFNULL(g.movein, 0)"
-	akhirExpr := fmt.Sprintf("%s + %s - IFNULL(keluar.keluar,0) + IFNULL(e.peny, 0)", queryAwal, queryMasuk)
+	queryAwal := "(COALESCE(b.awal, 0) + (COALESCE(masuk_awal.trf_in, 0) + COALESCE(movein_awal.movein_after, 0)) - COALESCE(keluar_awal.trf_out, 0) + COALESCE(peny_after_opname.peny, 0))"
+	queryMasuk := "COALESCE(c.masuk, 0) + COALESCE(g.movein, 0)"
+	akhirExpr := fmt.Sprintf("%s + %s - COALESCE(keluar.keluar,0) + COALESCE(e.peny, 0)", queryAwal, queryMasuk)
 
-	opnameExpr := "IFNULL(f.opname, 0)"
+	opnameExpr := "COALESCE(f.opname, 0)"
 	if tglInvAkhir.Format("2006-01-02") != filter.To.Format("2006-01-02") {
 		opnameExpr = akhirExpr
 	}
 
 	query := fmt.Sprintf(`
 		WITH b AS (
-			SELECT b.item_code, SUM(b.wh2) AS awal
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.wh2) AS awal
 			FROM tr_inv_material_harian_head a
 			INNER JOIN tr_inv_material_harian_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		c AS (
-			SELECT item_code, SUM(qty) AS masuk
+			SELECT UPPER(item_code) AS item_code, SUM(qty) AS masuk
 			FROM tr_ap_inv_head a
 			INNER JOIN tr_ap_inv_det b ON a.trans_no = b.trans_no
 			WHERE a.in_date >= ? AND a.in_date <= ?
-			GROUP BY item_code
+			GROUP BY UPPER(item_code)
 		),
 		e AS (
-			SELECT b.item_code, SUM(qty) AS peny
+			SELECT UPPER(b.item_code) AS item_code, SUM(qty) AS peny
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
-			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			LEFT JOIN ms_item c ON UPPER(b.item_code) = UPPER(c.item_code)
 			WHERE a.trans_date >= ? AND a.trans_date <= ?
 			AND c.item_group = 'MATERIAL'
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		f AS (
-			SELECT b.item_code, SUM(b.wh2) AS opname
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.wh2) AS opname
 			FROM tr_inv_material_harian_head a
 			INNER JOIN tr_inv_material_harian_det b ON a.trans_no = b.trans_no
 			WHERE a.trans_date = ?
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		g AS (
-			SELECT item_code, SUM(qty) AS movein
+			SELECT UPPER(item_code) AS item_code, SUM(qty) AS movein
 			FROM tr_inv_movein_head moveinhead
 			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no
 			WHERE moveinhead.trans_date >= ? AND moveinhead.trans_date <= ?
 			AND moveindet.location_code = 'WH-MAT-2'
-			GROUP BY item_code
+			GROUP BY UPPER(item_code)
 		),
 		keluar AS (
-			SELECT apdet.item_code, SUM(rmdet.qty) AS keluar
+			SELECT UPPER(apdet.item_code) AS item_code, SUM(rmdet.qty) AS keluar
 			FROM tr_inv_rm_head rmhead
 			INNER JOIN tr_inv_rm_det rmdet ON rmhead.trans_no = rmdet.trans_no
 			INNER JOIN tr_ap_inv_det apdet ON rmdet.data_no = apdet.data_no
 			WHERE rmhead.trans_date >= ? AND rmhead.trans_date <= ?
-			GROUP BY apdet.item_code
+			GROUP BY UPPER(apdet.item_code)
 		),
 		keluar_awal AS (
-			SELECT apdet.item_code, SUM(rmdet.qty) AS trf_out
+			SELECT UPPER(apdet.item_code) AS item_code, SUM(rmdet.qty) AS trf_out
 			FROM tr_inv_rm_head rmhead
 			INNER JOIN tr_inv_rm_det rmdet ON rmhead.trans_no = rmdet.trans_no
 			INNER JOIN tr_ap_inv_det apdet ON rmdet.data_no = apdet.data_no
 			WHERE rmhead.trans_date > ? AND rmhead.trans_date < ?
-			GROUP BY apdet.item_code
+			GROUP BY UPPER(apdet.item_code)
 		),
 		masuk_awal AS (
-			SELECT apdet.item_code, SUM(apdet.qty) AS trf_in
+			SELECT UPPER(apdet.item_code) AS item_code, SUM(apdet.qty) AS trf_in
 			FROM tr_ap_inv_head aphead
 			INNER JOIN tr_ap_inv_det apdet ON aphead.trans_no = apdet.trans_no
 			WHERE aphead.in_date > ? AND aphead.in_date < ?
-			GROUP BY apdet.item_code
+			GROUP BY UPPER(apdet.item_code)
 		),
 		movein_awal AS (
-			SELECT item_code, SUM(qty) AS movein_after
+			SELECT UPPER(item_code) AS item_code, SUM(qty) AS movein_after
 			FROM tr_inv_movein_head moveinhead
 			INNER JOIN tr_inv_movein_det moveindet ON moveinhead.trans_no = moveindet.trans_no
 			WHERE moveinhead.trans_date > ? AND moveinhead.trans_date < ?
 			AND moveindet.location_code = 'WH-MAT-2'
-			GROUP BY item_code
+			GROUP BY UPPER(item_code)
 		),
 		peny_after_opname AS (
-			SELECT b.item_code, SUM(b.qty) AS peny
+			SELECT UPPER(b.item_code) AS item_code, SUM(b.qty) AS peny
 			FROM tr_inv_adjust_head a
 			INNER JOIN tr_inv_adjust_det b ON a.trans_no = b.trans_no
-			LEFT JOIN ms_item c ON b.item_code = c.item_code
+			LEFT JOIN ms_item c ON UPPER(b.item_code) = UPPER(c.item_code)
 			WHERE a.trans_date > ? AND a.trans_date < ? 
 			AND c.item_group = 'MATERIAL'
-			GROUP BY b.item_code
+			GROUP BY UPPER(b.item_code)
 		),
 		z AS (
 			SELECT
@@ -194,30 +194,31 @@ func buildBaseQuery(tglInvAwal, tglInvAkhir time.Time, filter GetReportFilter) (
 				'' AS location_code,
 				%s AS awal,
 				%s AS masuk,
-				IFNULL(keluar.keluar, 0) AS keluar,
-				IFNULL(e.peny, 0) AS peny,
+				COALESCE(keluar.keluar, 0) AS keluar,
+				COALESCE(e.peny, 0) AS peny,
 				%s AS akhir,
 				%s AS opname,
 				(%s) - (%s) AS selisih
 			FROM ms_item item
-			LEFT JOIN b ON item.item_code = b.item_code
-			LEFT JOIN c ON item.item_code = c.item_code
-			LEFT JOIN e ON item.item_code = e.item_code
-			LEFT JOIN f ON item.item_code = f.item_code
-			LEFT JOIN g ON item.item_code = g.item_code
-			LEFT JOIN keluar ON item.item_code = keluar.item_code
-			LEFT JOIN keluar_awal ON item.item_code = keluar_awal.item_code
-			LEFT JOIN masuk_awal ON item.item_code = masuk_awal.item_code
-			LEFT JOIN movein_awal ON item.item_code = movein_awal.item_code
-			LEFT JOIN peny_after_opname ON item.item_code = peny_after_opname.item_code
+			LEFT JOIN b ON UPPER(item.item_code) = b.item_code
+			LEFT JOIN c ON UPPER(item.item_code) = c.item_code
+			LEFT JOIN e ON UPPER(item.item_code) = e.item_code
+			LEFT JOIN f ON UPPER(item.item_code) = f.item_code
+			LEFT JOIN g ON UPPER(item.item_code) = g.item_code
+			LEFT JOIN keluar ON UPPER(item.item_code) = keluar.item_code
+			LEFT JOIN keluar_awal ON UPPER(item.item_code) = keluar_awal.item_code
+			LEFT JOIN masuk_awal ON UPPER(item.item_code) = masuk_awal.item_code
+			LEFT JOIN movein_awal ON UPPER(item.item_code) = movein_awal.item_code
+			LEFT JOIN peny_after_opname ON UPPER(item.item_code) = peny_after_opname.item_code
 			WHERE item.item_group = 'MATERIAL' %s
-			AND item.item_type_code NOT LIKE 'Recycle%%'
+			AND item.item_type_code NOT ILIKE 'Recycle%%'
 		)
 		SELECT * FROM z WHERE z.awal <> 0 OR z.opname <> 0 OR z.masuk <> 0 OR z.akhir <> 0 OR z.peny <> 0
+		ORDER BY UPPER(item_code) COLLATE "C", item_code
 	`, queryAwal, queryMasuk, akhirExpr, opnameExpr, akhirExpr, opnameExpr, whereConditions)
 
 	// Urutan args harus sesuai dengan urutan ? di query CTE di atas:
-	// b(1) + c(2) + e(2) + f(1) + g(2) + out_after(2) + in_after(2) + movein_after(2) + peny_after(2) = 16
+	// b(1) + c(2) + e(2) + f(1) + g(2) + out_after(2) + in_after(2) + movein_after(2) + peny_after(2) + keluar(2) = 18
 	baseArgs := []interface{}{
 		tglInvAwal.Format("2006-01-02"),                                   // b:              awal date
 		filter.From.Format("2006-01-02"),                                  // c:              masuk from
@@ -271,6 +272,7 @@ func (r *RawMaterialReportRepository) GetReport(ctx context.Context, filter GetR
 		paginatedQuery := fmt.Sprintf(`
 			SELECT inner_q.*, COUNT(*) OVER() AS _total_count
 			FROM (%s) AS inner_q
+			ORDER BY UPPER(item_code) COLLATE "C", item_code
 			LIMIT %d OFFSET %d
 		`, baseQuery, filter.Limit, offset)
 

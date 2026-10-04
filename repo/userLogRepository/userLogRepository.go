@@ -50,7 +50,7 @@ func (r *UserLogRepository) GetAll(req model.UserLogListRequest) ([]model.UserLo
 		query = query.Where("user_id = ?", req.UserId)
 	}
 	if req.Username != "" {
-		query = query.Where("username LIKE ?", "%"+req.Username+"%")
+		query = query.Where("username ILIKE ?", "%"+req.Username+"%")
 	}
 	if req.Action != "" {
 		query = query.Where("action = ?", req.Action)

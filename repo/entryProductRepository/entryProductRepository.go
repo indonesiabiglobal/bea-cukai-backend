@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
@@ -29,17 +30,17 @@ func NewEntryProductRepository(fkiDB, itoryDB *gorm.DB) *EntryProductRepository 
 // FKI runs MySQL 5.5, which materializes a wrapping derived table (full history scan, ~17s).
 
 type entrySource struct {
-	sql                                      string
-	tgl, jenis, noPabean, itemCode, itemName string
+	sql                                                 string
+	tgl, transDate, jenis, noPabean, itemCode, itemName string
 }
 
 var fkiSource = entrySource{
-	sql: fkiEntrySQL, tgl: "cukai_date", jenis: "jenis_pabean", noPabean: "cukai_no",
+	sql: fkiEntrySQL, tgl: "cukai_date", transDate: "trans_date", jenis: "jenis_pabean", noPabean: "cukai_no",
 	itemCode: "det.item_code", itemName: "det.item_name",
 }
 
 var itorySource = entrySource{
-	sql: itoryEntrySQL, tgl: "bc_date", jenis: "bc_type", noPabean: "bc_no",
+	sql: itoryEntrySQL, tgl: "bc_date", transDate: "in_date", jenis: "bc_type", noPabean: "bc_no",
 	itemCode: "det.item_code", itemName: "item.item_name",
 }
 
@@ -109,12 +110,17 @@ type GetReportFilter struct {
 	Page         int
 	Limit        int
 	IsExport     bool
+	ByTransDate  bool // From/To filter trans_date instead of tgl_pabean
 }
 
 // buildQuery appends the report filters and ordering to a source query.
 // GORM rewrites "?" into the dialect's placeholder ($n for Postgres).
 func buildQuery(src entrySource, filter GetReportFilter) (string, []any) {
-	where := []string{src.tgl + " BETWEEN ? AND ?"}
+	dateCol := src.tgl
+	if filter.ByTransDate {
+		dateCol = src.transDate
+	}
+	where := []string{dateCol + " BETWEEN ? AND ?"}
 	args := []any{filter.From.Format("2006-01-02"), filter.To.Format("2006-01-02")}
 
 	if filter.PabeanType != "" {
@@ -270,29 +276,55 @@ func (c *EntryProductRepository) itoryCopiesDropped(ctx context.Context, fkiRows
 	return kept, nil
 }
 
-// GetReport retrieves entry products from FKI + Itory with filters and pagination.
-// A document present in both sources (see itoryCopiesDropped) is taken from Itory only.
+// rows fetches both sources for the filter; a document present in both (see itoryCopiesDropped)
+// is taken from Itory only.
 // ponytail: both sources are fully loaded for the date range then paged in memory;
 // if ranges grow too large, fetch only offset+limit rows per source and merge.
-func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.EntryProduct, int64, error) {
+func (c *EntryProductRepository) rows(ctx context.Context, filter GetReportFilter) ([]entryRow, error) {
 	fkiRows, err := fetch(ctx, c.fkiDB, fkiSource, filter)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	fkiRows, err = c.itoryCopiesDropped(ctx, fkiRows)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	itoryRows, err := fetch(ctx, c.itoryDB, itorySource, filter)
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 	for i := range itoryRows {
 		itoryRows[i].TglPabean = localDate(itoryRows[i].TglPabean)
 		itoryRows[i].TransDate = localDate(itoryRows[i].TransDate)
 	}
+	return append(fkiRows, itoryRows...), nil
+}
 
-	results, total := mergeAndPage(append(fkiRows, itoryRows...), filter)
+// GetReport retrieves entry products from FKI + Itory with filters and pagination.
+func (c *EntryProductRepository) GetReport(ctx context.Context, filter GetReportFilter) ([]model.EntryProduct, int64, error) {
+	rows, err := c.rows(ctx, filter)
+	if err != nil {
+		return nil, 0, err
+	}
+	results, total := mergeAndPage(rows, filter)
 	return results, total, nil
+}
+
+// ItemKey normalizes an item code like MySQL's case-insensitive, trailing-space-padded comparison.
+func ItemKey(code string) string { return strings.ToUpper(strings.TrimSpace(code)) }
+
+// QtyByTransDate sums rcv_qty per ItemKey(item_code) over entries with trans_date in [from, to]
+// (the old sync tr_pemasukan_barang.trans_date), with the same FKI/Itory dedupe as GetReport.
+func (c *EntryProductRepository) QtyByTransDate(ctx context.Context, from, to time.Time) (map[string]decimal.Decimal, error) {
+	rows, err := c.rows(ctx, GetReportFilter{From: from, To: to, ByTransDate: true})
+	if err != nil {
+		return nil, err
+	}
+	qty := map[string]decimal.Decimal{}
+	for _, r := range rows {
+		k := ItemKey(r.ItemCode)
+		qty[k] = qty[k].Add(r.RcvQty)
+	}
+	return qty, nil
 }
