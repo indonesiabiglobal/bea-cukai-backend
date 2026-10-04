@@ -11,10 +11,17 @@ func main() {
 	db, err := database.ConnectDB()
 	if err != nil {
 		log.Fatal("Error connect to database", err)
-		panic(err)
+	}
+	fkiDB, err := database.ConnectFKI()
+	if err != nil {
+		log.Fatal("Error connect to FKI database", err)
+	}
+	itoryDB, err := database.ConnectItory()
+	if err != nil {
+		log.Fatal("Error connect to Itory database", err)
 	}
 
-	app := routes.NewRoute(db)
+	app := routes.NewRoute(db, fkiDB, itoryDB)
 
 	apiPort := helper.GetEnv("PORT")
 	log.Fatal(app.Run(":" + apiPort))

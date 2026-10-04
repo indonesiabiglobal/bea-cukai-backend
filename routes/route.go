@@ -56,7 +56,7 @@ import (
 
 func corsConfig() cors.Config {
 	allow := os.Getenv("CORS_ALLOW_ORIGINS")
-	origins := []string{"http://192.168.100.100:3131", "http://36.93.193.19:3131", "http://localhost:3000", "http://127.0.0.1:3000","http://localhost:3131", "http://127.0.0.1:3131"}
+	origins := []string{"http://192.168.100.100:3131", "http://36.93.193.19:3131", "http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3131", "http://127.0.0.1:3131"}
 	if allow != "" {
 		parts := strings.Split(allow, ",")
 		origins = make([]string, 0, len(parts))
@@ -79,12 +79,12 @@ func corsConfig() cors.Config {
 	}
 }
 
-func NewRoute(db *gorm.DB) *gin.Engine {
+func NewRoute(db, fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	// Repositories
 	userRepository := userRepository.NewUserRepository(db)
 	userLogRepository := userLogRepository.NewUserLogRepository(db)
 	transactionLogRepository := transactionLogRepository.NewTransactionLogRepository(db)
-	entryProductRepository := entryProductRepository.NewEntryProductRepository(db)
+	entryProductRepository := entryProductRepository.NewEntryProductRepository(fkiDB, itoryDB)
 	expenditureProductRepository := expenditureProductRepository.NewExpenditureProductRepository(db)
 	pabeanRepository := pabeanRepository.NewPabeanRepository(db)
 	itemGroupRepository := itemGroupRepository.NewItemGroupRepository(db)
@@ -172,8 +172,8 @@ func NewRoute(db *gorm.DB) *gin.Engine {
 		// Protected user log endpoints
 		userLogs.Use(middleware.Authentication())
 		{
-			userLogs.GET("", userLogController.GetAll)             // Get all logs (admin)
-			userLogs.GET("/my-logs", userLogController.GetMyLogs)  // Get current user's logs
+			userLogs.GET("", userLogController.GetAll)               // Get all logs (admin)
+			userLogs.GET("/my-logs", userLogController.GetMyLogs)    // Get current user's logs
 			userLogs.GET("/:user_id", userLogController.GetByUserId) // Get logs by user ID (admin)
 		}
 	}

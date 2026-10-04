@@ -62,7 +62,7 @@ func (c *EntryProductController) GetReport(ctx *gin.Context) {
 		IsExport:     false,
 	}
 
-	res, totalCount, err := c.EntryProductService.GetReport(filter)
+	res, totalCount, err := c.EntryProductService.GetReport(ctx.Request.Context(), filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get entry products", err, gin.H{
 			"from":         from.Format("2006-01-02"),
@@ -146,7 +146,7 @@ func (c *EntryProductController) ExportExcel(ctx *gin.Context) {
 		IsExport:     true,
 	}
 
-	res, _, err := c.EntryProductService.GetReport(filter)
+	res, _, err := c.EntryProductService.GetReport(ctx.Request.Context(), filter)
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "DATA_FETCH_FAILED", "fail get entry products for export", err, gin.H{
 			"from":         from.Format("2006-01-02"),
@@ -160,8 +160,14 @@ func (c *EntryProductController) ExportExcel(ctx *gin.Context) {
 		return
 	}
 
-	// Generate Excel file
-	excelFile, err := c.generateExcelFile(res, from, to)
+	// Generate Excel file (layout=raw: TEMPORARY test export to compare with sync data)
+	raw := ctx.Query("layout") == "raw"
+	var excelFile *excelize.File
+	if raw {
+		excelFile, err = generateRawExcelFile(res)
+	} else {
+		excelFile, err = c.generateExcelFile(res, from, to)
+	}
 	if err != nil {
 		apiresponse.Error(ctx, http.StatusInternalServerError, "EXCEL_GENERATION_FAILED", "failed to generate Excel file", err, gin.H{
 			"from": from.Format("2006-01-02"),
@@ -175,6 +181,9 @@ func (c *EntryProductController) ExportExcel(ctx *gin.Context) {
 	filename := fmt.Sprintf("laporan_pemasukan_barang_%s_%s.xlsx", 
 		from.Format("2006-01-02"), 
 		to.Format("2006-01-02"))
+	if raw {
+		filename = fmt.Sprintf("test_pemasukan_barang_%s_%s.xlsx", from.Format("2006-01-02"), to.Format("2006-01-02"))
+	}
 	
 	ctx.Header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 	ctx.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
@@ -337,5 +346,28 @@ func (c *EntryProductController) generateExcelFile(data []model.EntryProduct, fr
 	// Delete default sheet if it exists
 	f.DeleteSheet("Sheet1")
 
+	return f, nil
+}
+
+// generateRawExcelFile writes one plain sheet whose columns and order match the source queries.
+// TEMPORARY: test export to compare live FKI+Itory data with the sync table; remove after verification.
+func generateRawExcelFile(data []model.EntryProduct) (*excelize.File, error) {
+	f := excelize.NewFile()
+	sheet := f.GetSheetName(0)
+
+	header := []any{"jenis_pabean", "no_pabean", "tgl_pabean", "trans_no", "vend_dlv_no", "trans_date",
+		"vendor_code", "vendor_name", "item_code", "item_name", "rcv_qty", "unit", "curr_code", "net_price", "net_amount"}
+	if err := f.SetSheetRow(sheet, "A1", &header); err != nil {
+		return nil, err
+	}
+
+	for i, d := range data {
+		row := []any{d.JenisPabean, d.NoPabean, d.TglPabean.Format("2006-01-02"), d.TransNo, d.VendDlvNo,
+			d.TransDate.Format("2006-01-02"), d.VendorCode, d.VendorName, d.ItemCode, d.ItemName,
+			d.RcvQty.InexactFloat64(), d.PchUnit, d.CurrCode, d.NetPrice.InexactFloat64(), d.NetAmount.InexactFloat64()}
+		if err := f.SetSheetRow(sheet, fmt.Sprintf("A%d", i+2), &row); err != nil {
+			return nil, err
+		}
+	}
 	return f, nil
 }

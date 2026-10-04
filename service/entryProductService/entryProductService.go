@@ -22,7 +22,6 @@ func NewEntryProductService(entryProductRepo *entryProductRepository.EntryProduc
 // ==========================
 
 // GetReport retrieves entry products with filters and pagination
-func (s *EntryProductService) GetReport(filter entryProductRepository.GetReportFilter) ([]model.EntryProduct, int64, error) {
-	ctx := context.Background()
+func (s *EntryProductService) GetReport(ctx context.Context, filter entryProductRepository.GetReportFilter) ([]model.EntryProduct, int64, error) {
 	return s.entryProductRepo.GetReport(ctx, filter)
 }
