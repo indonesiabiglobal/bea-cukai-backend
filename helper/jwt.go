@@ -12,6 +12,9 @@ import (
 var SECRETKEY string = GetEnv("SECRETKEY")
 
 func GenerateToken(id string, username string) (string, error) {
+	if SECRETKEY == "" {
+		return "", errors.New("server SECRETKEY is not configured")
+	}
 	claims := jwt.MapClaims{
 		"id": id,
 		"username": username,
@@ -25,15 +28,15 @@ func GenerateToken(id string, username string) (string, error) {
 }
 
 func VerifyToken(ctx *gin.Context) (interface{}, error) {
-	err := errors.New("please login to get the token")
-	auth := ctx.Request.Header.Get("Authorization")
-	bearer := strings.HasPrefix(auth, "Bearer")
-
-	if !bearer {
-		return nil, err
+	// fail closed: secret kosong = siapa pun bisa tanda tangan token sendiri
+	if SECRETKEY == "" {
+		return nil, errors.New("server SECRETKEY is not configured")
 	}
 
-	tokenStr := strings.Split(auth, "Bearer ")[1]
+	tokenStr, ok := strings.CutPrefix(ctx.Request.Header.Get("Authorization"), "Bearer ")
+	if !ok || tokenStr == "" {
+		return nil, errors.New("please login to get the token")
+	}
 
 	token, err := jwt.Parse(tokenStr, func(token *jwt.Token) (interface{}, error) {
 		return []byte(SECRETKEY), nil

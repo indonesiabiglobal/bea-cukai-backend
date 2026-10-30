@@ -142,11 +142,11 @@ func NewRoute(fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	auth := app.Group("/auth")
 	{
 		auth.POST("/login", userController.LoginUser)
-		auth.POST("/register", userController.CreateUser)
 
-		// logout
+		// logout; register hanya untuk user yang sudah login (bukan self-signup publik)
 		auth.Use(middleware.Authentication())
 		{
+			auth.POST("/register", userController.CreateUser)
 			auth.POST("/logout", userController.LogoutUser)
 		}
 	}
@@ -177,75 +177,75 @@ func NewRoute(fkiDB, itoryDB *gorm.DB) *gin.Engine {
 	}
 
 	// Report: EntryProduct analytics
-	reportEntryProduct := app.Group("/report/entry-products")
+	reportEntryProduct := app.Group("/report/entry-products", middleware.Authentication())
 	{
 		reportEntryProduct.GET("", entryProductController.GetReport)
 		reportEntryProduct.GET("/export", entryProductController.ExportExcel)
 	}
 
 	// Report: ExpenditureProduct analytics
-	reportExpenditureProduct := app.Group("/report/expenditure-products")
+	reportExpenditureProduct := app.Group("/report/expenditure-products", middleware.Authentication())
 	{
 		reportExpenditureProduct.GET("", expenditureProductController.GetReport)
 		reportExpenditureProduct.GET("/export", expenditureProductController.ExportExcel)
 	}
 
 	// Report: WIP Position
-	reportWipPosition := app.Group("/report/wip-position")
+	reportWipPosition := app.Group("/report/wip-position", middleware.Authentication())
 	{
 		reportWipPosition.GET("", wipPositionReportController.GetReport)
 		reportWipPosition.GET("/export", wipPositionReportController.ExportExcel)
 	}
 
 	// Report: Raw Material
-	reportRawMaterial := app.Group("/report/raw-material")
+	reportRawMaterial := app.Group("/report/raw-material", middleware.Authentication())
 	{
 		reportRawMaterial.GET("", rawMaterialReportController.GetReport)
 		reportRawMaterial.GET("/export", rawMaterialReportController.ExportExcel)
 	}
 
 	// Report: Finished Product
-	reportFinishedProduct := app.Group("/report/finished-product")
+	reportFinishedProduct := app.Group("/report/finished-product", middleware.Authentication())
 	{
 		reportFinishedProduct.GET("", finishedProductReportController.GetReport)
 		reportFinishedProduct.GET("/export", finishedProductReportController.ExportExcel)
 	}
 
 	// Report: Machine and Tool
-	reportMachineTool := app.Group("/report/machine-tool")
+	reportMachineTool := app.Group("/report/machine-tool", middleware.Authentication())
 	{
 		reportMachineTool.GET("", machineToolReportController.GetReport)
 		reportMachineTool.GET("/export", machineToolReportController.ExportExcel)
 	}
 
 	// Report: Reject and Scrap
-	reportRejectScrap := app.Group("/report/reject-scrap-product")
+	reportRejectScrap := app.Group("/report/reject-scrap-product", middleware.Authentication())
 	{
 		reportRejectScrap.GET("", rejectScrapReportController.GetReport)
 		reportRejectScrap.GET("/export", rejectScrapReportController.ExportExcel)
 	}
 
 	// Report: Auxiliary Material
-	reportAuxiliaryMaterial := app.Group("/auxiliary-material")
+	reportAuxiliaryMaterial := app.Group("/auxiliary-material", middleware.Authentication())
 	{
 		reportAuxiliaryMaterial.GET("", auxiliaryMaterialReportController.GetReport)
 		reportAuxiliaryMaterial.GET("/export", auxiliaryMaterialReportController.ExportExcel)
 	}
 
 	// Pabean: Master pabean document
-	pabean := app.Group("/pabean")
+	pabean := app.Group("/pabean", middleware.Authentication())
 	{
 		pabean.GET("", pabeanController.GetAll)
 	}
 
 	// Item Groups: System item groups
-	itemGroups := app.Group("/item-groups")
+	itemGroups := app.Group("/item-groups", middleware.Authentication())
 	{
 		itemGroups.GET("", itemGroupController.GetAll)
 	}
 
 	// Products: Master products (ms_item)
-	products := app.Group("/products")
+	products := app.Group("/products", middleware.Authentication())
 	{
 		products.GET("", productController.GetAll)
 		products.GET("/:code", productController.GetByCode)
